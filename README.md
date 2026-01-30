@@ -2,6 +2,8 @@
 
 A real-time 3D N-body gravity simulator built with Rust/WebAssembly and HTML5 Canvas.
 
+**[▶️ Live Demo](https://mmeyer2k.github.io/gravity-sim/)**
+
 ## Quick Start
 
 ```bash
@@ -63,6 +65,7 @@ wasm-pack build --target web --out-dir www/pkg
 | **Binary Star** | Two stars in mutual orbit with a circumbinary planet |
 | **Neutron Star Merger** | Two neutron stars spiraling inward via GW radiation |
 | **Figure-8** | Famous stable 3-body choreography (Chenciner-Montgomery) |
+| **Lagrange Points** | Sun-Earth system with objects at all 5 Lagrange points (L1-L5) |
 | **Chaotic System** | 3 bodies in unstable configuration |
 | **Empty Space** | Blank canvas - add your own bodies |
 
