@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gravity Simulator</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #0a0a0f;
+            color: #e0e0e0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+        }
+        #canvas { display: block; cursor: crosshair; }
+        #controls {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(20, 20, 30, 0.9);
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid rgba(100, 100, 255, 0.3);
+            min-width: 280px;
+            backdrop-filter: blur(10px);
+        }
+        h1 {
+            font-size: 1.4em;
+            margin-bottom: 15px;
+            color: #8888ff;
+        }
+        .control-group { margin-bottom: 15px; }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 0.85em;
+            color: #aaa;
+        }
+        input[type="range"] { width: 100%; accent-color: #6666ff; }
+        select, button {
+            width: 100%;
+            padding: 8px 12px;
+            margin-top: 5px;
+            background: rgba(40, 40, 60, 0.8);
+            border: 1px solid rgba(100, 100, 255, 0.3);
+            color: #e0e0e0;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+        select:hover, button:hover {
+            background: rgba(60, 60, 100, 0.8);
+        }
+        button.danger {
+            background: rgba(100, 40, 40, 0.8);
+            border-color: rgba(255, 100, 100, 0.3);
+        }
+        .stats {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid rgba(100, 100, 255, 0.2);
+            font-size: 0.8em;
+            color: #888;
+        }
+        .stats div { margin-bottom: 5px; }
+        .stat-value { color: #aaf; font-family: monospace; }
+        #instructions {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(20, 20, 30, 0.9);
+            padding: 15px;
+            border-radius: 12px;
+            border: 1px solid rgba(100, 100, 255, 0.3);
+            font-size: 0.8em;
+            max-width: 300px;
+        }
+        #instructions h3 { color: #8888ff; margin-bottom: 10px; }
+        #instructions p { margin-bottom: 5px; color: #aaa; }
+        kbd {
+            background: rgba(60, 60, 80, 0.8);
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+        .color-picker { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 5px; }
+        .color-swatch {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid transparent;
+        }
+        .color-swatch:hover { transform: scale(1.2); }
+        .color-swatch.selected {
+            border-color: white;
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+        }
+        #velocity-indicator {
+            position: fixed;
+            pointer-events: none;
+            color: rgba(255, 255, 100, 0.8);
+            font-size: 12px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    
+    <div id="controls">
+        <h1>🌌 Gravity Simulator</h1>
+        
+        <div class="control-group">
+            <label>Preset Scenarios</label>
+            <div style="display: flex; gap: 8px;">
+                <select id="preset" style="flex: 1;">
+                    <option value="solar">Solar System</option>
+                    <option value="binary">Binary Star</option>
+                    <option value="neutron">Neutron Star Merger</option>
+                    <option value="figure8">Figure-8 (3-body)</option>
+                    <option value="lagrange">Lagrange Points</option>
+                    <option value="chaos">Chaotic System</option>
+                    <option value="empty">Empty Space</option>
+                </select>
+                <button id="reset-btn" style="width: auto; padding: 8px 12px;">🔄</button>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <label>Speed: <span id="time-value">1x</span></label>
+            <input type="range" id="time-scale" min="0.1" max="10" step="0.1" value="1">
+        </div>
+
+        <div class="control-group">
+            <label>Gravity: <span id="gravity-value">1x</span></label>
+            <input type="range" id="gravity-slider" min="0.1" max="10" step="0.1" value="1">
+        </div>
+
+        <div class="control-group">
+            <label>New Body Mass: <span id="mass-value">Earth</span></label>
+            <input type="range" id="mass-slider" min="0" max="7" step="1" value="2">
+        </div>
+
+        <div class="control-group">
+            <label>Body Color</label>
+            <div class="color-picker" id="color-picker">
+                <div class="color-swatch selected" style="background: #ffdd44" data-color="#ffdd44"></div>
+                <div class="color-swatch" style="background: #4488ff" data-color="#4488ff"></div>
+                <div class="color-swatch" style="background: #ff6644" data-color="#ff6644"></div>
+                <div class="color-swatch" style="background: #44ff88" data-color="#44ff88"></div>
+                <div class="color-swatch" style="background: #ff44aa" data-color="#ff44aa"></div>
+                <div class="color-swatch" style="background: #ffffff" data-color="#ffffff"></div>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <button id="pause-btn">⏸️ Pause</button>
+        </div>
+
+        <div class="control-group">
+            <button id="clear-btn" class="danger">🗑️ Clear All</button>
+        </div>
+
+        <div class="control-group">
+            <label><input type="checkbox" id="trails-toggle" checked> Show Trails</label>
+            <label><input type="checkbox" id="vectors-toggle"> Show Velocity</label>
+            <label><input type="checkbox" id="collisions-toggle" checked> Enable Collisions</label>
+        </div>
+
+        <div class="control-group">
+            <label>Trail Length: <span id="trail-value">500</span></label>
+            <input type="range" id="trail-slider" min="50" max="2000" step="50" value="500">
+        </div>
+
+        <div class="stats">
+            <div>Bodies: <span class="stat-value" id="body-count">0</span></div>
+            <div>KE: <span class="stat-value" id="ke">0</span></div>
+            <div>PE: <span class="stat-value" id="pe">0</span></div>
+        </div>
+    </div>
+
+    <div id="instructions">
+        <h3>Controls</h3>
+        <p><kbd>Click</kbd> Add body at rest</p>
+        <p><kbd>Drag</kbd> Add body with velocity</p>
+        <p><kbd>Right-click</kbd> Remove nearest body</p>
+        <p><kbd>Scroll</kbd> Zoom in/out</p>
+        <p><kbd>Shift+drag</kbd> Pan view</p>
+        <p><kbd>Ctrl+Shift+drag</kbd> Rotate 3D view</p>
+        <p><kbd>R</kbd> Reset view rotation</p>
+        <p><kbd>Space</kbd> Pause/Resume</p>
+    </div>
+
+    <div id="velocity-indicator" style="display: none;"></div>
+    <div id="body-tooltip" style="display: none; position: fixed; background: rgba(20, 20, 30, 0.95); padding: 10px; border-radius: 8px; border: 1px solid rgba(100, 100, 255, 0.3); font-size: 0.85em; pointer-events: none; z-index: 100;"></div>
+    <div id="fps-counter" style="position: fixed; bottom: 20px; right: 20px; background: rgba(20, 20, 30, 0.8); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(100, 100, 255, 0.3); font-size: 0.85em; font-family: monospace; color: #8888ff;">FPS: --</div>
+
+    <script type="module">
+        import init, { 
+            Simulation, Body,
+            create_solar_system, create_binary_star, create_neutron_merger,
+            create_figure_eight, create_chaos, create_lagrange 
+        } from './pkg/gravity_sim.js';
+
+        async function main() {
+            await init();
+
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            // State
+            let sim = null;  // Will be set during init
+            let paused = false;
+            let showTrails = true;
+            let showVectors = false;
+            let timeScale = 1.0;
+            
+            // View transform
+            let viewX = 0;
+            let viewY = 0;
+            let zoom = 1.5e-9;
+            
+            // 3D camera rotation (in radians)
+            let camRotX = 0;  // Rotation around X axis (tilt up/down)
+            let camRotZ = 0;  // Rotation around Z axis (rotate left/right)
+            
+            // Body metadata (colors, trails)
+            let bodyMeta = [];
+            let maxTrailLength = 500;
+            
+            // Collision flash effects
+            let collisionFlashes = [];
+            
+            // Interaction
+            let isDragging = false;
+            let isPanning = false;
+            let isRotating = false;
+            let dragStart = null;
+            let panStart = null;
+            let rotateStart = null;
+            let selectedColor = '#ffdd44';
+            
+            // Mass presets
+            const massPresets = [
+                { name: 'Asteroid', mass: 1e15, radius: 3 },
+                { name: 'Moon', mass: 7.34e22, radius: 5 },
+                { name: 'Earth', mass: 5.972e24, radius: 8 },
+                { name: 'Neptune', mass: 1.024e26, radius: 12 },
+                { name: 'Jupiter', mass: 1.898e27, radius: 18 },
+                { name: 'Brown Dwarf', mass: 2e28, radius: 22 },
+                { name: 'Star', mass: 1.989e30, radius: 28 },
+                { name: 'Neutron Star', mass: 4e30, radius: 6 },
+            ];
+            let selectedMassIndex = 2;
+
+            function resize() {
+                canvas.width = window.innerWidth;
+                canvas.height = window.innerHeight;
+                viewX = canvas.width / 2;
+                viewY = canvas.height / 2;
+            }
+            resize();
+            window.addEventListener('resize', resize);
+
+            function worldToScreen(x, y, z = 0) {
+                // Apply 3D rotation
+                // Rotate around Z axis first
+                const cosZ = Math.cos(camRotZ);
+                const sinZ = Math.sin(camRotZ);
+                let rx = x * cosZ - y * sinZ;
+                let ry = x * sinZ + y * cosZ;
+                let rz = z;
+                
+                // Then rotate around X axis (tilt)
+                const cosX = Math.cos(camRotX);
+                const sinX = Math.sin(camRotX);
+                const ry2 = ry * cosX - rz * sinX;
+                const rz2 = ry * sinX + rz * cosX;
+                
+                // Project to 2D (simple orthographic projection)
+                return {
+                    x: viewX + rx * zoom,
+                    y: viewY - ry2 * zoom,
+                    depth: rz2  // For depth sorting if needed
+                };
+            }
+
+            function screenToWorld(sx, sy) {
+                // Inverse transform (only works for z=0 plane when not tilted)
+                const cosZ = Math.cos(-camRotZ);
+                const sinZ = Math.sin(-camRotZ);
+                const wx = (sx - viewX) / zoom;
+                const wy = -(sy - viewY) / zoom;
+                return {
+                    x: wx * cosZ - wy * sinZ,
+                    y: wx * sinZ + wy * cosZ
+                };
+            }
+            
+            // Convert a screen-space velocity vector to world-space 3D velocity
+            // This applies the inverse camera rotation so that dragging "right" on screen
+            // produces velocity in the correct 3D direction relative to the current view
+            function screenVelocityToWorld(svx, svy) {
+                // Screen velocity: svx is rightward, svy is downward (we negate for world up)
+                const vScreenX = svx;
+                const vScreenY = -svy;
+                
+                // Inverse X rotation (un-tilt)
+                const cosX = Math.cos(-camRotX);
+                const sinX = Math.sin(-camRotX);
+                // In screen space, vScreenY corresponds to the tilted Y/Z plane
+                // After inverse X rotation: vy_untilted = vScreenY * cos(-camRotX), vz = vScreenY * sin(-camRotX)
+                const vyUntilted = vScreenY * cosX;
+                const vz = vScreenY * sinX;
+                
+                // Inverse Z rotation
+                const cosZ = Math.cos(-camRotZ);
+                const sinZ = Math.sin(-camRotZ);
+                const vx = vScreenX * cosZ - vyUntilted * sinZ;
+                const vy = vScreenX * sinZ + vyUntilted * cosZ;
+                
+                return { vx, vy, vz };
+            }
+
+            function initBodyMeta(preset = null) {
+                bodyMeta = [];
+                // Special colors for Lagrange points preset to identify each L-point
+                if (preset === 'lagrange') {
+                    const lagrangeColors = [
+                        '#ffdd44',  // Sun (yellow)
+                        '#4488ff',  // Earth (blue)
+                        '#ff4444',  // L1 (red)
+                        '#ff8844',  // L2 (orange)
+                        '#ff44ff',  // L3 (magenta)
+                        '#44ff44',  // L4 (green - leading Trojan)
+                        '#44ffff',  // L5 (cyan - trailing Trojan)
+                    ];
+                    for (let i = 0; i < sim.body_count(); i++) {
+                        bodyMeta.push({
+                            color: lagrangeColors[i] || '#ffffff',
+                            trail: []
+                        });
+                    }
+                } else {
+                    const colors = ['#ffdd44', '#4488ff', '#ff6644', '#44ff88', '#ff44aa'];
+                    for (let i = 0; i < sim.body_count(); i++) {
+                        bodyMeta.push({
+                            color: colors[i % colors.length],
+                            trail: []
+                        });
+                    }
+                }
+            }
+
+            function loadPreset(name) {
+                switch(name) {
+                    case 'solar': sim = create_solar_system(); break;
+                    case 'binary': sim = create_binary_star(); break;
+                    case 'neutron': sim = create_neutron_merger(); break;
+                    case 'figure8': sim = create_figure_eight(); break;
+                    case 'lagrange': sim = create_lagrange(); break;
+                    case 'chaos': sim = create_chaos(); break;
+                    case 'empty': sim = new Simulation(); break;
+                }
+                initBodyMeta(name);
+                collisionFlashes = [];
+                // Reset view (position, zoom, and 3D rotation)
+                viewX = canvas.width / 2;
+                viewY = canvas.height / 2;
+                zoom = 1.5e-9;
+                camRotX = 0;
+                camRotZ = 0;
+                // Apply current settings
+                const gravitySlider = document.getElementById('gravity-slider');
+                sim.set_gravity_mult(parseFloat(gravitySlider.value));
+                sim.set_collisions(document.getElementById('collisions-toggle').checked);
+            }
+
+            function formatEnergy(e) {
+                const abs = Math.abs(e);
+                if (abs === 0) return '0';
+                return e.toExponential(2);
+            }
+            
+            function classifyMass(mass) {
+                if (mass < 1e20) return 'Asteroid';
+                if (mass < 1e23) return 'Moon';
+                if (mass < 1e26) return 'Planet';
+                if (mass < 1e28) return 'Gas Giant';
+                if (mass < 1e29) return 'Brown Dwarf';
+                if (mass < 5e30) return 'Star';
+                return 'Neutron Star';
+            }
+            
+            function formatMass(mass) {
+                if (mass >= 1.989e30) {
+                    return (mass / 1.989e30).toFixed(2) + ' M☉';
+                } else if (mass >= 5.972e24) {
+                    return (mass / 5.972e24).toFixed(2) + ' M⊕';
+                } else {
+                    return mass.toExponential(2) + ' kg';
+                }
+            }
+            
+            function formatRadius(radius) {
+                if (radius >= 1e9) {
+                    return (radius / 1e9).toFixed(2) + ' M km';
+                } else if (radius >= 1e6) {
+                    return (radius / 1e6).toFixed(0) + ' km';
+                } else if (radius >= 1e3) {
+                    return (radius / 1e3).toFixed(1) + ' km';
+                } else {
+                    return radius.toFixed(0) + ' m';
+                }
+            }
+
+            function draw() {
+                // Clear canvas
+                ctx.fillStyle = '#0a0a0f';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                // Draw grid
+                const gridSpacing = 100; // pixels
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+                ctx.lineWidth = 1;
+                
+                // Vertical lines
+                const startX = viewX % gridSpacing;
+                for (let x = startX; x < canvas.width; x += gridSpacing) {
+                    ctx.beginPath();
+                    ctx.moveTo(x, 0);
+                    ctx.lineTo(x, canvas.height);
+                    ctx.stroke();
+                }
+                
+                // Horizontal lines
+                const startY = viewY % gridSpacing;
+                for (let y = startY; y < canvas.height; y += gridSpacing) {
+                    ctx.beginPath();
+                    ctx.moveTo(0, y);
+                    ctx.lineTo(canvas.width, y);
+                    ctx.stroke();
+                }
+
+                // Draw trails (3D)
+                if (showTrails) {
+                    for (let i = 0; i < bodyMeta.length; i++) {
+                        const meta = bodyMeta[i];
+                        if (meta.trail.length < 2) continue;
+                        
+                        ctx.beginPath();
+                        const start = worldToScreen(meta.trail[0].x, meta.trail[0].y, meta.trail[0].z || 0);
+                        ctx.moveTo(start.x, start.y);
+                        
+                        for (let j = 1; j < meta.trail.length; j++) {
+                            const pt = worldToScreen(meta.trail[j].x, meta.trail[j].y, meta.trail[j].z || 0);
+                            ctx.lineTo(pt.x, pt.y);
+                        }
+                        
+                        ctx.strokeStyle = meta.color + '60';
+                        ctx.lineWidth = 1.5;
+                        ctx.stroke();
+                    }
+                }
+
+                // Draw bodies
+                for (let i = 0; i < sim.body_count(); i++) {
+                    const x = sim.get_body_x(i);
+                    const y = sim.get_body_y(i);
+                    const z = sim.get_body_z(i);
+                    const r = sim.get_body_radius(i);
+                    const screen = worldToScreen(x, y, z);
+                    const color = bodyMeta[i]?.color || '#ffffff';
+                    
+                    ctx.beginPath();
+                    ctx.arc(screen.x, screen.y, r, 0, Math.PI * 2);
+                    ctx.fillStyle = color;
+                    ctx.fill();
+
+                    // Velocity vector with arrow head (3D)
+                    if (showVectors) {
+                        const vx = sim.get_body_vx(i);
+                        const vy = sim.get_body_vy(i);
+                        const vz = sim.get_body_vz(i);
+                        const speed = Math.sqrt(vx*vx + vy*vy + vz*vz);
+                        
+                        if (speed > 10) { // Only draw if moving
+                            // Project velocity endpoint in 3D
+                            const arrowScale = Math.min(150, Math.max(40, speed / 400)) / speed;
+                            const endWorld = {
+                                x: x + vx * arrowScale * 1e9,
+                                y: y + vy * arrowScale * 1e9,
+                                z: z + vz * arrowScale * 1e9
+                            };
+                            const endScreen = worldToScreen(endWorld.x, endWorld.y, endWorld.z);
+                            
+                            // Direction in screen space
+                            const sdx = endScreen.x - screen.x;
+                            const sdy = endScreen.y - screen.y;
+                            const screenDist = Math.sqrt(sdx*sdx + sdy*sdy);
+                            
+                            if (screenDist > 5) {
+                                const nx = sdx / screenDist;
+                                const ny = sdy / screenDist;
+                                
+                                // Start slightly outside the body
+                                const startX = screen.x + nx * (r + 5);
+                                const startY = screen.y + ny * (r + 5);
+                                
+                                // Draw thick line
+                                ctx.beginPath();
+                                ctx.moveTo(startX, startY);
+                                ctx.lineTo(endScreen.x, endScreen.y);
+                                ctx.strokeStyle = color;
+                                ctx.lineWidth = 3;
+                                ctx.lineCap = 'round';
+                                ctx.stroke();
+                                
+                                // Arrow head at end
+                                const angle = Math.atan2(sdy, sdx);
+                                const arrowSize = 12;
+                                ctx.beginPath();
+                                ctx.moveTo(endScreen.x, endScreen.y);
+                                ctx.lineTo(
+                                    endScreen.x - arrowSize * Math.cos(angle - 0.5),
+                                    endScreen.y - arrowSize * Math.sin(angle - 0.5)
+                                );
+                                ctx.lineTo(
+                                    endScreen.x - arrowSize * Math.cos(angle + 0.5),
+                                    endScreen.y - arrowSize * Math.sin(angle + 0.5)
+                                );
+                                ctx.closePath();
+                                ctx.fillStyle = color;
+                                ctx.fill();
+                            }
+                        }
+                    }
+                }
+
+                // Draw collision flashes
+                for (const flash of collisionFlashes) {
+                    const gradient = ctx.createRadialGradient(
+                        flash.x, flash.y, 0,
+                        flash.x, flash.y, flash.radius
+                    );
+                    gradient.addColorStop(0, `rgba(255, 255, 255, ${flash.alpha})`);
+                    gradient.addColorStop(0.3, `rgba(255, 200, 100, ${flash.alpha * 0.8})`);
+                    gradient.addColorStop(0.6, `rgba(255, 100, 50, ${flash.alpha * 0.4})`);
+                    gradient.addColorStop(1, `rgba(255, 50, 0, 0)`);
+                    
+                    ctx.beginPath();
+                    ctx.arc(flash.x, flash.y, flash.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = gradient;
+                    ctx.fill();
+                }
+
+                // Draw drag indicator
+                if (isDragging && dragStart) {
+                    const mouse = dragStart.current;
+                    ctx.beginPath();
+                    ctx.moveTo(dragStart.x, dragStart.y);
+                    ctx.lineTo(mouse.x, mouse.y);
+                    ctx.strokeStyle = '#ffff0088';
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([5, 5]);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                    
+                    const preset = massPresets[selectedMassIndex];
+                    ctx.beginPath();
+                    ctx.arc(dragStart.x, dragStart.y, preset.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = selectedColor + '88';
+                    ctx.fill();
+                }
+
+                // Update stats
+                document.getElementById('body-count').textContent = sim.body_count();
+                document.getElementById('ke').textContent = formatEnergy(sim.kinetic_energy());
+                document.getElementById('pe').textContent = formatEnergy(sim.potential_energy());
+            }
+
+            let lastFpsTime = performance.now();
+            let fpsFrameCount = 0;
+            
+            function update() {
+                // FPS calculation
+                fpsFrameCount++;
+                const now = performance.now();
+                if (now - lastFpsTime >= 1000) {
+                    document.getElementById('fps-counter').textContent = `FPS: ${fpsFrameCount}`;
+                    fpsFrameCount = 0;
+                    lastFpsTime = now;
+                }
+                
+                if (!paused) {
+                    // Fixed small dt for numerical stability
+                    // dt = 3600 seconds (1 hour)
+                    // At 1x speed: ~7 sim days per real second (at 60fps)
+                    // At 10x: ~70 sim days per real second
+                    const dt = 3600;
+                    const stepsPerFrame = Math.round(10 * timeScale);
+                    
+                    // Track body masses before step to detect mergers
+                    const prevCount = sim.body_count();
+                    const prevMasses = [];
+                    for (let i = 0; i < prevCount; i++) {
+                        prevMasses.push(sim.get_body_mass(i));
+                    }
+                    
+                    for (let i = 0; i < stepsPerFrame; i++) {
+                        sim.step(dt);
+                    }
+                    
+                    // Check if bodies merged (count decreased) - create flash at merged body
+                    const newCount = sim.body_count();
+                    if (newCount < prevCount) {
+                        // Find which body gained mass (the one that absorbed another)
+                        for (let i = 0; i < newCount; i++) {
+                            const newMass = sim.get_body_mass(i);
+                            const oldMass = prevMasses[i] || 0;
+                            // If mass increased significantly, this body absorbed another
+                            if (newMass > oldMass * 1.01) {
+                                const screen = worldToScreen(sim.get_body_x(i), sim.get_body_y(i), sim.get_body_z(i));
+                                collisionFlashes.push({
+                                    x: screen.x,
+                                    y: screen.y,
+                                    radius: 20,
+                                    maxRadius: 80,
+                                    alpha: 1.0,
+                                    color: bodyMeta[i]?.color || '#ffffff'
+                                });
+                            }
+                        }
+                    }
+                    
+                    while (bodyMeta.length > sim.body_count()) {
+                        // Remove last body's metadata (merged into another)
+                        bodyMeta.pop();
+                    }
+                    
+                    // Update trails (3D)
+                    for (let i = 0; i < sim.body_count(); i++) {
+                        if (bodyMeta[i]) {
+                            bodyMeta[i].trail.push({
+                                x: sim.get_body_x(i),
+                                y: sim.get_body_y(i),
+                                z: sim.get_body_z(i)
+                            });
+                            if (bodyMeta[i].trail.length > maxTrailLength) {
+                                bodyMeta[i].trail.shift();
+                            }
+                        }
+                    }
+                }
+                
+                // Animate collision flashes (runs even when paused for smooth fadeout)
+                for (let i = collisionFlashes.length - 1; i >= 0; i--) {
+                    const flash = collisionFlashes[i];
+                    flash.radius += 4;
+                    flash.alpha -= 0.03;
+                    if (flash.alpha <= 0) {
+                        collisionFlashes.splice(i, 1);
+                    }
+                }
+                
+                draw();
+                requestAnimationFrame(update);
+            }
+
+            // Event handlers
+            document.getElementById('preset').addEventListener('change', (e) => {
+                loadPreset(e.target.value);
+            });
+
+            document.getElementById('reset-btn').addEventListener('click', () => {
+                loadPreset(document.getElementById('preset').value);
+            });
+
+            document.getElementById('time-scale').addEventListener('input', (e) => {
+                timeScale = parseFloat(e.target.value);
+                document.getElementById('time-value').textContent = timeScale + 'x';
+            });
+
+            document.getElementById('gravity-slider').addEventListener('input', (e) => {
+                const grav = parseFloat(e.target.value);
+                sim.set_gravity_mult(grav);
+                document.getElementById('gravity-value').textContent = grav + 'x';
+            });
+
+            document.getElementById('mass-slider').addEventListener('input', (e) => {
+                selectedMassIndex = parseInt(e.target.value);
+                document.getElementById('mass-value').textContent = massPresets[selectedMassIndex].name;
+            });
+
+            document.getElementById('pause-btn').addEventListener('click', () => {
+                paused = !paused;
+                document.getElementById('pause-btn').textContent = paused ? '▶️ Resume' : '⏸️ Pause';
+            });
+
+            document.getElementById('clear-btn').addEventListener('click', () => {
+                sim.clear();
+                bodyMeta = [];
+            });
+
+            document.getElementById('trails-toggle').addEventListener('change', (e) => {
+                showTrails = e.target.checked;
+                if (!showTrails) bodyMeta.forEach(m => m.trail = []);
+            });
+
+            document.getElementById('vectors-toggle').addEventListener('change', (e) => {
+                showVectors = e.target.checked;
+            });
+
+            document.getElementById('collisions-toggle').addEventListener('change', (e) => {
+                sim.set_collisions(e.target.checked);
+            });
+
+            document.getElementById('trail-slider').addEventListener('input', (e) => {
+                maxTrailLength = parseInt(e.target.value);
+                document.getElementById('trail-value').textContent = maxTrailLength;
+                // Trim existing trails if needed
+                bodyMeta.forEach(m => {
+                    if (m.trail.length > maxTrailLength) {
+                        m.trail = m.trail.slice(-maxTrailLength);
+                    }
+                });
+            });
+
+            // Color picker
+            document.querySelectorAll('.color-swatch').forEach(swatch => {
+                swatch.addEventListener('click', () => {
+                    document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+                    swatch.classList.add('selected');
+                    selectedColor = swatch.dataset.color;
+                    console.log('Color selected:', selectedColor);
+                });
+            });
+
+            // Mouse interaction
+            canvas.addEventListener('mousedown', (e) => {
+                if (e.button === 0 && e.ctrlKey && e.shiftKey) {
+                    // Ctrl+Shift+left-click = rotate 3D view
+                    isRotating = true;
+                    rotateStart = { x: e.clientX, y: e.clientY, camRotX, camRotZ };
+                    e.preventDefault();
+                } else if (e.button === 1 || (e.button === 0 && e.shiftKey && !e.ctrlKey)) {
+                    // Middle-click or Shift+left-click (no Ctrl) = pan
+                    isPanning = true;
+                    panStart = { x: e.clientX, y: e.clientY, viewX, viewY };
+                    e.preventDefault();
+                } else if (e.button === 0) {
+                    isDragging = true;
+                    dragStart = {
+                        x: e.clientX,
+                        y: e.clientY,
+                        current: { x: e.clientX, y: e.clientY }
+                    };
+                }
+            });
+
+            canvas.addEventListener('mousemove', (e) => {
+                if (isRotating && rotateStart) {
+                    // Rotate view based on mouse drag
+                    const dx = e.clientX - rotateStart.x;
+                    const dy = e.clientY - rotateStart.y;
+                    camRotZ = rotateStart.camRotZ + dx * 0.005;
+                    camRotX = rotateStart.camRotX + dy * 0.005;
+                    // Clamp X rotation to avoid flipping
+                    camRotX = Math.max(-Math.PI/2, Math.min(Math.PI/2, camRotX));
+                } else if (isPanning && panStart) {
+                    viewX = panStart.viewX + (e.clientX - panStart.x);
+                    viewY = panStart.viewY + (e.clientY - panStart.y);
+                } else if (isDragging && dragStart) {
+                    dragStart.current = { x: e.clientX, y: e.clientY };
+                    
+                    const dx = e.clientX - dragStart.x;
+                    const dy = e.clientY - dragStart.y;
+                    // Scale so ~200px drag = ~30km/s (Earth orbital velocity)
+                    const speed = Math.sqrt(dx*dx + dy*dy) * 150;
+                    const indicator = document.getElementById('velocity-indicator');
+                    indicator.style.display = 'block';
+                    indicator.style.left = (e.clientX + 15) + 'px';
+                    indicator.style.top = (e.clientY + 15) + 'px';
+                    indicator.textContent = `${(speed/1000).toFixed(1)} km/s`;
+                }
+                
+                // Check for hover over bodies
+                if (!isDragging && !isPanning) {
+                    const world = screenToWorld(e.clientX, e.clientY);
+                    const tooltip = document.getElementById('body-tooltip');
+                    let hoveredBody = null;
+                    
+                    for (let i = 0; i < sim.body_count(); i++) {
+                        const bx = sim.get_body_x(i);
+                        const by = sim.get_body_y(i);
+                        const bz = sim.get_body_z(i);
+                        const screen = worldToScreen(bx, by, bz);
+                        const r = sim.get_body_radius(i);
+                        const dx = e.clientX - screen.x;
+                        const dy = e.clientY - screen.y;
+                        const dist = Math.sqrt(dx*dx + dy*dy);
+                        
+                        if (dist < r + 10) { // 10px margin
+                            const mass = sim.get_body_mass(i);
+                            const vx = sim.get_body_vx(i);
+                            const vy = sim.get_body_vy(i);
+                            const vz = sim.get_body_vz(i);
+                            const speed = Math.sqrt(vx*vx + vy*vy + vz*vz);
+                            const physRadius = sim.get_body_physical_radius(i);
+                            hoveredBody = {
+                                type: classifyMass(mass),
+                                mass: formatMass(mass),
+                                radius: formatRadius(physRadius),
+                                velocity: (speed / 1000).toFixed(1) + ' km/s'
+                            };
+                            break;
+                        }
+                    }
+                    
+                    if (hoveredBody) {
+                        tooltip.innerHTML = `<strong>${hoveredBody.type}</strong><br>Mass: ${hoveredBody.mass}<br>Radius: ${hoveredBody.radius}<br>Velocity: ${hoveredBody.velocity}`;
+                        tooltip.style.display = 'block';
+                        tooltip.style.left = (e.clientX + 15) + 'px';
+                        tooltip.style.top = (e.clientY + 15) + 'px';
+                    } else {
+                        tooltip.style.display = 'none';
+                    }
+                }
+            });
+
+            canvas.addEventListener('mouseup', (e) => {
+                if (isRotating) {
+                    isRotating = false;
+                    rotateStart = null;
+                } else if (isPanning) {
+                    isPanning = false;
+                    panStart = null;
+                } else if (isDragging && dragStart) {
+                    const world = screenToWorld(dragStart.x, dragStart.y);
+                    const preset = massPresets[selectedMassIndex];
+                    
+                    const dx = e.clientX - dragStart.x;
+                    const dy = e.clientY - dragStart.y;
+                    // ~200px drag = ~30km/s (Earth orbital velocity)
+                    const vScale = 150;
+                    
+                    // Convert screen-space drag to world-space velocity (respects 3D camera rotation)
+                    const worldVel = screenVelocityToWorld(dx * vScale, dy * vScale);
+                    
+                    const body = Body.new_3d(world.x, world.y, 0, worldVel.vx, worldVel.vy, worldVel.vz, preset.mass, preset.radius);
+                    sim.add_body(body);
+                    console.log('Adding body with color:', selectedColor);
+                    bodyMeta.push({ color: selectedColor, trail: [] });
+                    
+                    isDragging = false;
+                    dragStart = null;
+                    document.getElementById('velocity-indicator').style.display = 'none';
+                }
+            });
+
+            canvas.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                
+                // If dragging to create a body, cancel it
+                if (isDragging) {
+                    isDragging = false;
+                    dragStart = null;
+                    document.getElementById('velocity-indicator').style.display = 'none';
+                    return;
+                }
+                
+                // Otherwise, remove nearest body
+                const world = screenToWorld(e.clientX, e.clientY);
+                
+                let nearestIdx = -1;
+                let nearestDist = Infinity;
+                for (let i = 0; i < sim.body_count(); i++) {
+                    const bx = sim.get_body_x(i);
+                    const by = sim.get_body_y(i);
+                    const dist = Math.sqrt((bx - world.x)**2 + (by - world.y)**2);
+                    if (dist < nearestDist) {
+                        nearestDist = dist;
+                        nearestIdx = i;
+                    }
+                }
+                
+                if (nearestIdx >= 0 && nearestDist < 50e9 / zoom) {
+                    sim.remove_body(nearestIdx);
+                    bodyMeta.splice(nearestIdx, 1);
+                }
+            });
+
+            canvas.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1;
+                const mouseWorld = screenToWorld(e.clientX, e.clientY);
+                zoom *= zoomFactor;
+                viewX = e.clientX - mouseWorld.x * zoom;
+                viewY = e.clientY + mouseWorld.y * zoom;
+            });
+
+            document.addEventListener('keydown', (e) => {
+                if (e.code === 'Space') {
+                    paused = !paused;
+                    document.getElementById('pause-btn').textContent = paused ? '▶️ Resume' : '⏸️ Pause';
+                    e.preventDefault();
+                } else if (e.code === 'KeyR' && !e.ctrlKey) {
+                    // Reset camera rotation
+                    camRotX = 0;
+                    camRotZ = 0;
+                }
+            });
+
+            // Initialize - load whatever preset the dropdown shows
+            const presetSelect = document.getElementById('preset');
+            loadPreset(presetSelect.value);
+            
+            const massSlider = document.getElementById('mass-slider');
+            selectedMassIndex = parseInt(massSlider.value);
+            document.getElementById('mass-value').textContent = massPresets[selectedMassIndex].name;
+            
+            const speedSlider = document.getElementById('time-scale');
+            timeScale = parseFloat(speedSlider.value);
+            document.getElementById('time-value').textContent = timeScale + 'x';
+            
+            const trailSlider = document.getElementById('trail-slider');
+            maxTrailLength = parseInt(trailSlider.value);
+            document.getElementById('trail-value').textContent = maxTrailLength;
+            
+            const gravitySlider = document.getElementById('gravity-slider');
+            sim.set_gravity_mult(parseFloat(gravitySlider.value));
+            document.getElementById('gravity-value').textContent = gravitySlider.value + 'x';
+            
+            sim.set_collisions(document.getElementById('collisions-toggle').checked);
+            
+            // Sync selected color with DOM
+            const selectedSwatch = document.querySelector('.color-swatch.selected');
+            if (selectedSwatch) {
+                selectedColor = selectedSwatch.dataset.color;
+            }
+            
+            // Sync checkboxes with JS state
+            showTrails = document.getElementById('trails-toggle').checked;
+            showVectors = document.getElementById('vectors-toggle').checked;
+            
+            update();
+        }
+
+        main();
+    </script>
+</body>
+</html>
