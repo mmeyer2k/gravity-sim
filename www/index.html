@@ -456,7 +456,9 @@
                 if (mass < 1e29) return 'Brown Dwarf';
                 if (mass < 2.5e30) return 'Star';  // Up to ~1.25 solar masses
                 if (mass < 6e30) return 'Neutron Star';  // ~1.25-3 solar masses
-                return 'Massive Star';  // Supergiants
+                if (mass < 1e32) return 'Massive Star';  // Supergiants up to ~50 solar masses
+                if (mass < 1e35) return 'Stellar Black Hole';  // Up to ~1000 solar masses
+                return 'Supermassive Black Hole';  // > ~1000 solar masses
             }
             
             function formatMass(mass) {
