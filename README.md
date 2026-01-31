@@ -66,6 +66,7 @@ wasm-pack build --target web --out-dir www/pkg
 | **Neutron Star Merger** | Two neutron stars spiraling inward via GW radiation |
 | **Figure-8** | Famous stable 3-body choreography (Chenciner-Montgomery) |
 | **Lagrange Points** | Sun-Earth system with objects at all 5 Lagrange points (L1-L5) |
+| **Galaxy Collision** | Two galaxies with 30 stars each on collision course |
 | **Chaotic System** | 3 bodies in unstable configuration |
 | **Empty Space** | Blank canvas - add your own bodies |
 

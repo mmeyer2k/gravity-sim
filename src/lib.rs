@@ -571,3 +571,86 @@ pub fn create_lagrange() -> Simulation {
     
     sim
 }
+
+// Preset: Galaxy Collision
+// Two "galaxies" each with a massive central body and orbiting stars
+#[wasm_bindgen]
+pub fn create_galaxy_collision() -> Simulation {
+    let mut sim = Simulation::new();
+    
+    let core_mass = 1.0e32;  // Massive central body
+    let star_mass = 1.0e28;  // Small "star" mass
+    let galaxy_radius = 200.0e9;  // Galaxy radius
+    let separation = 800.0e9;  // Initial separation between galaxies
+    let approach_v = 15000.0;  // Approach velocity (m/s)
+    
+    // Simple pseudo-random number generator (deterministic for reproducibility)
+    let mut seed: u64 = 12345;
+    let mut random = || -> f64 {
+        seed = seed.wrapping_mul(1103515245).wrapping_add(12345);
+        ((seed >> 16) & 0x7fff) as f64 / 32768.0  // Returns 0.0 to 1.0
+    };
+    
+    // Galaxy 1 - centered at (-separation/2, 0), moving right
+    let g1_x = -separation / 2.0;
+    sim.add_body(Body::new_3d(g1_x, 0.0, 0.0, approach_v, 3000.0, 0.0, core_mass, 20.0));
+    
+    // Stars orbiting galaxy 1
+    let stars_per_galaxy = 30;
+    for i in 0..stars_per_galaxy {
+        // Base angle with randomness
+        let base_angle = 2.0 * std::f64::consts::PI * (i as f64) / (stars_per_galaxy as f64);
+        let angle = base_angle + (random() - 0.5) * 0.5;  // ±0.25 radians jitter
+        
+        // Radius with randomness
+        let base_r = galaxy_radius * (0.3 + 0.7 * ((i % 3) as f64 + 1.0) / 3.0);
+        let r = base_r * (0.8 + 0.4 * random());  // 80% to 120% of base radius
+        
+        // Position with Z offset for 3D thickness
+        let z = galaxy_radius * 0.15 * (random() - 0.5);  // ±7.5% of radius in Z
+        let x = g1_x + r * angle.cos();
+        let y = r * angle.sin();
+        
+        // Orbital velocity with slight inclination
+        let v = (G * core_mass / r).sqrt();
+        let inclination = 0.1 * (random() - 0.5);  // Slight orbital tilt
+        let vx = approach_v - v * angle.sin();
+        let vy = 3000.0 + v * angle.cos() * (1.0 - inclination.abs());
+        let vz = v * inclination;  // Z-component of velocity
+        
+        sim.add_body(Body::new_3d(x, y, z, vx, vy, vz, star_mass, 3.0));
+    }
+    
+    // Galaxy 2 - centered at (+separation/2, 0), tilted galactic plane
+    let g2_x = separation / 2.0;
+    sim.add_body(Body::new_3d(g2_x, 100.0e9, 50.0e9, -approach_v, -3000.0, -1000.0, core_mass, 20.0));
+    
+    // Stars orbiting galaxy 2 (rotating opposite direction, different plane)
+    for i in 0..stars_per_galaxy {
+        // Base angle with randomness
+        let base_angle = 2.0 * std::f64::consts::PI * (i as f64) / (stars_per_galaxy as f64);
+        let angle = base_angle + (random() - 0.5) * 0.5;
+        
+        // Radius with randomness
+        let base_r = galaxy_radius * (0.3 + 0.7 * ((i % 3) as f64 + 1.0) / 3.0);
+        let r = base_r * (0.8 + 0.4 * random());
+        
+        // Position - galaxy 2 is tilted ~30° relative to galaxy 1
+        let tilt: f64 = 0.5;  // ~30 degrees in radians
+        let x = g2_x + r * angle.cos();
+        let y_flat = r * angle.sin();
+        let y = 100.0e9 + y_flat * tilt.cos();
+        let z = 50.0e9 + y_flat * tilt.sin() + galaxy_radius * 0.1 * (random() - 0.5);
+        
+        // Orbital velocity (opposite rotation, tilted plane)
+        let v = (G * core_mass / r).sqrt();
+        let inclination = 0.1 * (random() - 0.5);
+        let vx = -approach_v + v * angle.sin();
+        let vy = -3000.0 - v * angle.cos() * tilt.cos() * (1.0 - inclination.abs());
+        let vz = -1000.0 - v * angle.cos() * tilt.sin() + v * inclination;
+        
+        sim.add_body(Body::new_3d(x, y, z, vx, vy, vz, star_mass, 3.0));
+    }
+    
+    sim
+}

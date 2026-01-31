@@ -120,6 +120,7 @@
                     <option value="neutron">Neutron Star Merger</option>
                     <option value="figure8">Figure-8 (3-body)</option>
                     <option value="lagrange">Lagrange Points</option>
+                    <option value="galaxy">Galaxy Collision</option>
                     <option value="chaos">Chaotic System</option>
                     <option value="empty">Empty Space</option>
                 </select>
@@ -139,7 +140,7 @@
 
         <div class="control-group">
             <label>New Body Mass: <span id="mass-value">Earth</span></label>
-            <input type="range" id="mass-slider" min="0" max="7" step="1" value="2">
+            <input type="range" id="mass-slider" min="0" max="8" step="1" value="2">
         </div>
 
         <div class="control-group">
@@ -231,7 +232,7 @@
         import init, { 
             Simulation, Body,
             create_solar_system, create_binary_star, create_neutron_merger,
-            create_figure_eight, create_chaos, create_lagrange 
+            create_figure_eight, create_chaos, create_lagrange, create_galaxy_collision
         } from './pkg/gravity_sim.js';
 
         async function main() {
@@ -285,6 +286,7 @@
                 { name: 'Brown Dwarf', mass: 2e28, radius: 22 },
                 { name: 'Star', mass: 1.989e30, radius: 28 },
                 { name: 'Neutron Star', mass: 4e30, radius: 6 },
+                { name: 'Supermassive BH', mass: 8e36, radius: 2 },  // ~4 million solar masses (like Sgr A*)
             ];
             let selectedMassIndex = 2;
 
@@ -394,6 +396,7 @@
                     case 'neutron': sim = create_neutron_merger(); break;
                     case 'figure8': sim = create_figure_eight(); break;
                     case 'lagrange': sim = create_lagrange(); break;
+                    case 'galaxy': sim = create_galaxy_collision(); break;
                     case 'chaos': sim = create_chaos(); break;
                     case 'empty': sim = new Simulation(); break;
                 }
