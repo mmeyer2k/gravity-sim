@@ -226,6 +226,9 @@
     <div id="velocity-indicator" style="display: none;"></div>
     <div id="body-tooltip" style="display: none; position: fixed; background: rgba(20, 20, 30, 0.95); padding: 10px; border-radius: 8px; border: 1px solid rgba(100, 100, 255, 0.3); font-size: 0.85em; pointer-events: none; z-index: 100;"></div>
     <div id="fps-counter" style="position: fixed; bottom: 20px; right: 20px; background: rgba(20, 20, 30, 0.8); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(100, 100, 255, 0.3); font-size: 0.85em; font-family: monospace; color: #8888ff;">FPS: --</div>
+    <div id="orientation-widget" style="position: fixed; bottom: 60px; right: 20px; width: 80px; height: 80px;">
+        <canvas id="orientation-canvas" width="80" height="80" style="background: rgba(20, 20, 30, 0.8); border-radius: 8px; border: 1px solid rgba(100, 100, 255, 0.3);"></canvas>
+    </div>
     <div id="follow-indicator" style="display: none; position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(20, 20, 30, 0.9); padding: 10px 20px; border-radius: 8px; border: 1px solid rgba(100, 255, 100, 0.4); font-size: 0.9em; color: #8f8;">Following: --  <span style="color: #888; font-size: 0.8em;">(Esc to stop)</span></div>
 
     <script type="module">
@@ -628,6 +631,90 @@
                 document.getElementById('body-count').textContent = sim.body_count();
                 document.getElementById('ke').textContent = formatEnergy(sim.kinetic_energy());
                 document.getElementById('pe').textContent = formatEnergy(sim.potential_energy());
+                
+                // Draw orientation widget
+                drawOrientationWidget();
+            }
+            
+            // Draw 3D orientation axis indicator
+            function drawOrientationWidget() {
+                const oCanvas = document.getElementById('orientation-canvas');
+                const oCtx = oCanvas.getContext('2d');
+                const cx = 40, cy = 40;  // Center of widget
+                const axisLen = 28;      // Axis length in pixels
+                
+                // Clear
+                oCtx.fillStyle = 'rgba(20, 20, 30, 0.9)';
+                oCtx.fillRect(0, 0, 80, 80);
+                
+                // Transform 3D axis endpoints to 2D using current camera rotation
+                function transformAxis(ax, ay, az) {
+                    // Rotate around Z axis
+                    const cosZ = Math.cos(camRotZ);
+                    const sinZ = Math.sin(camRotZ);
+                    let rx = ax * cosZ - ay * sinZ;
+                    let ry = ax * sinZ + ay * cosZ;
+                    let rz = az;
+                    
+                    // Rotate around X axis (tilt)
+                    const cosX = Math.cos(camRotX);
+                    const sinX = Math.sin(camRotX);
+                    const ry2 = ry * cosX - rz * sinX;
+                    const rz2 = ry * sinX + rz * cosX;
+                    
+                    return { x: cx + rx * axisLen, y: cy - ry2 * axisLen, depth: rz2 };
+                }
+                
+                // Define axes (unit vectors)
+                const axes = [
+                    { dir: [1, 0, 0], color: '#ff4444', label: 'X' },  // X - red
+                    { dir: [0, 1, 0], color: '#44ff44', label: 'Y' },  // Y - green  
+                    { dir: [0, 0, 1], color: '#4488ff', label: 'Z' },  // Z - blue
+                ];
+                
+                // Sort by depth (draw back-to-front)
+                const transformed = axes.map(a => ({
+                    ...a,
+                    end: transformAxis(a.dir[0], a.dir[1], a.dir[2])
+                }));
+                transformed.sort((a, b) => a.end.depth - b.end.depth);
+                
+                // Draw axes
+                for (const axis of transformed) {
+                    const end = axis.end;
+                    
+                    // Draw axis line
+                    oCtx.beginPath();
+                    oCtx.moveTo(cx, cy);
+                    oCtx.lineTo(end.x, end.y);
+                    oCtx.strokeStyle = axis.color;
+                    oCtx.lineWidth = 2;
+                    oCtx.stroke();
+                    
+                    // Draw arrowhead
+                    const dx = end.x - cx;
+                    const dy = end.y - cy;
+                    const angle = Math.atan2(dy, dx);
+                    const arrowSize = 6;
+                    oCtx.beginPath();
+                    oCtx.moveTo(end.x, end.y);
+                    oCtx.lineTo(end.x - arrowSize * Math.cos(angle - 0.5), end.y - arrowSize * Math.sin(angle - 0.5));
+                    oCtx.lineTo(end.x - arrowSize * Math.cos(angle + 0.5), end.y - arrowSize * Math.sin(angle + 0.5));
+                    oCtx.closePath();
+                    oCtx.fillStyle = axis.color;
+                    oCtx.fill();
+                    
+                    // Draw label
+                    oCtx.font = '10px monospace';
+                    oCtx.fillStyle = axis.color;
+                    oCtx.fillText(axis.label, end.x + 3, end.y + 3);
+                }
+                
+                // Draw center dot
+                oCtx.beginPath();
+                oCtx.arc(cx, cy, 3, 0, Math.PI * 2);
+                oCtx.fillStyle = '#ffffff';
+                oCtx.fill();
             }
 
             let lastFpsTime = performance.now();

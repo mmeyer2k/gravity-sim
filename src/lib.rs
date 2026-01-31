@@ -2,7 +2,8 @@ use wasm_bindgen::prelude::*;
 
 const G: f64 = 6.674e-11; // Gravitational constant
 const C: f64 = 2.998e8;   // Speed of light
-const SOFTENING: f64 = 1e8; // Softening to prevent division issues at close range
+const SOFTENING: f64 = 1e6; // Softening parameter (1000 km) - prevents singularities at close range
+const MIN_DIST: f64 = 1.0;  // Minimum distance to prevent division by zero (1 meter)
 
 #[wasm_bindgen]
 #[derive(Clone, Copy)]
@@ -161,7 +162,9 @@ impl Simulation {
         self.bodies.get(index).map(|b| b.physical_radius).unwrap_or(0.0)
     }
 
-    /// Step simulation using leapfrog integration (stable for orbital mechanics)
+    /// Step simulation using Velocity Verlet integration (2nd order symplectic)
+    /// This is the "kick-drift-kick" form of leapfrog, which is time-reversible
+    /// and conserves energy much better than simple Euler methods.
     /// dt is in seconds
     pub fn step(&mut self, dt: f64) {
         let n = self.bodies.len();
@@ -169,51 +172,35 @@ impl Simulation {
             return;
         }
 
-        // Calculate accelerations for all bodies (3D)
-        let mut ax = vec![0.0; n];
-        let mut ay = vec![0.0; n];
-        let mut az = vec![0.0; n];
+        // Step 1: Calculate initial accelerations
+        let (mut ax, mut ay, mut az) = self.compute_accelerations();
 
+        // Step 2: Half-kick - update velocities by half timestep
+        let half_dt = dt * 0.5;
         for i in 0..n {
-            for j in (i + 1)..n {
-                let dx = self.bodies[j].x - self.bodies[i].x;
-                let dy = self.bodies[j].y - self.bodies[i].y;
-                let dz = self.bodies[j].z - self.bodies[i].z;
-                
-                let dist_sq = dx * dx + dy * dy + dz * dz;
-                let dist = dist_sq.sqrt();
-                let dist_soft = (dist_sq + SOFTENING * SOFTENING).sqrt();
-                
-                // F = G * m1 * m2 / r^2
-                // a1 = G * m2 / r^2 (toward body 2)
-                let accel_mag = G * self.gravity_mult / (dist_soft * dist_soft);
-                
-                // Unit vector from i to j
-                let ux = dx / dist;
-                let uy = dy / dist;
-                let uz = dz / dist;
-                
-                // Accelerations (a = G * m_other / r^2)
-                ax[i] += accel_mag * self.bodies[j].mass * ux;
-                ay[i] += accel_mag * self.bodies[j].mass * uy;
-                az[i] += accel_mag * self.bodies[j].mass * uz;
-                ax[j] -= accel_mag * self.bodies[i].mass * ux;
-                ay[j] -= accel_mag * self.bodies[i].mass * uy;
-                az[j] -= accel_mag * self.bodies[i].mass * uz;
-            }
+            self.bodies[i].vx += ax[i] * half_dt;
+            self.bodies[i].vy += ay[i] * half_dt;
+            self.bodies[i].vz += az[i] * half_dt;
         }
 
-        // Symplectic Euler integration (3D)
+        // Step 3: Drift - update positions by full timestep
         for i in 0..n {
-            // Update velocity
-            self.bodies[i].vx += ax[i] * dt;
-            self.bodies[i].vy += ay[i] * dt;
-            self.bodies[i].vz += az[i] * dt;
-            
-            // Update position
             self.bodies[i].x += self.bodies[i].vx * dt;
             self.bodies[i].y += self.bodies[i].vy * dt;
             self.bodies[i].z += self.bodies[i].vz * dt;
+        }
+
+        // Step 4: Recompute accelerations at new positions
+        let (ax_new, ay_new, az_new) = self.compute_accelerations();
+        ax = ax_new;
+        ay = ay_new;
+        az = az_new;
+
+        // Step 5: Half-kick - complete velocity update
+        for i in 0..n {
+            self.bodies[i].vx += ax[i] * half_dt;
+            self.bodies[i].vy += ay[i] * half_dt;
+            self.bodies[i].vz += az[i] * half_dt;
         }
 
         // Gravitational wave radiation drag (causes orbital decay)
@@ -227,8 +214,58 @@ impl Simulation {
         }
     }
     
+    /// Compute gravitational accelerations for all bodies
+    /// Uses Newton's law of universal gravitation: F = G * m1 * m2 / r^2
+    fn compute_accelerations(&self) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
+        let n = self.bodies.len();
+        let mut ax = vec![0.0; n];
+        let mut ay = vec![0.0; n];
+        let mut az = vec![0.0; n];
+
+        for i in 0..n {
+            for j in (i + 1)..n {
+                let dx = self.bodies[j].x - self.bodies[i].x;
+                let dy = self.bodies[j].y - self.bodies[i].y;
+                let dz = self.bodies[j].z - self.bodies[i].z;
+                
+                let dist_sq = dx * dx + dy * dy + dz * dz;
+                
+                // Apply softening to prevent singularity at close range
+                let dist_sq_soft = dist_sq + SOFTENING * SOFTENING;
+                
+                // Prevent division by zero for unit vector
+                let dist = dist_sq.sqrt().max(MIN_DIST);
+                
+                // a = G * m / r^2, using softened distance for magnitude
+                let accel_mag = G * self.gravity_mult / dist_sq_soft;
+                
+                // Unit vector from i to j (using actual distance for direction)
+                let inv_dist = 1.0 / dist;
+                let ux = dx * inv_dist;
+                let uy = dy * inv_dist;
+                let uz = dz * inv_dist;
+                
+                // Apply Newton's 3rd law: equal and opposite accelerations
+                // a_i = G * m_j / r^2 (toward j)
+                // a_j = G * m_i / r^2 (toward i)
+                let ai = accel_mag * self.bodies[j].mass;
+                let aj = accel_mag * self.bodies[i].mass;
+                
+                ax[i] += ai * ux;
+                ay[i] += ai * uy;
+                az[i] += ai * uz;
+                ax[j] -= aj * ux;
+                ay[j] -= aj * uy;
+                az[j] -= aj * uz;
+            }
+        }
+        
+        (ax, ay, az)
+    }
+    
     /// Apply gravitational wave radiation energy loss (Peters formula approximation)
     /// This causes orbits to decay over time, simulating inspiral
+    /// Reference: Peters, P.C. (1964) "Gravitational Radiation and the Motion of Two Point Masses"
     fn apply_gw_drag(&mut self, dt: f64) {
         let n = self.bodies.len();
         // Pre-factor: 32/5 * G^4 / c^5
@@ -240,25 +277,25 @@ impl Simulation {
                 let dy = self.bodies[j].y - self.bodies[i].y;
                 let dz = self.bodies[j].z - self.bodies[i].z;
                 let dist_sq = dx * dx + dy * dy + dz * dz;
-                let dist = dist_sq.sqrt();
+                let dist = dist_sq.sqrt().max(MIN_DIST);
                 
                 let m1 = self.bodies[i].mass;
                 let m2 = self.bodies[j].mass;
+                let total_mass = m1 + m2;
                 
                 // Power radiated: P = (32/5) * (G^4/c^5) * (m1*m2)^2 * (m1+m2) / r^5
-                let power = gw_factor * (m1 * m2).powi(2) * (m1 + m2) / dist.powi(5);
+                let power = gw_factor * (m1 * m2).powi(2) * total_mass / dist.powi(5);
                 
                 // Relative velocity
                 let dvx = self.bodies[j].vx - self.bodies[i].vx;
                 let dvy = self.bodies[j].vy - self.bodies[i].vy;
                 let dvz = self.bodies[j].vz - self.bodies[i].vz;
                 let rel_speed_sq = dvx * dvx + dvy * dvy + dvz * dvz;
-                let rel_speed = rel_speed_sq.sqrt();
                 
-                if rel_speed < 1.0 { continue; }
+                if rel_speed_sq < 1.0 { continue; }
                 
-                // Total kinetic energy in CM frame
-                let reduced_mass = (m1 * m2) / (m1 + m2);
+                // Total kinetic energy in center-of-mass frame
+                let reduced_mass = (m1 * m2) / total_mass;
                 let kinetic_energy = 0.5 * reduced_mass * rel_speed_sq;
                 
                 if kinetic_energy < 1.0 { continue; }
@@ -269,17 +306,21 @@ impl Simulation {
                 // Fraction of energy to remove (capped to prevent instability)
                 let fraction = (energy_loss / kinetic_energy).min(0.01);
                 
-                // Reduce relative velocity (apply as drag toward each other)
+                // Apply drag as reduction in relative velocity
                 // This removes energy from the orbit, causing inspiral
                 let drag = fraction * 0.5;  // Split between both bodies
                 
-                // Apply drag (reduce relative velocity)
-                self.bodies[i].vx += drag * dvx * m2 / (m1 + m2);
-                self.bodies[i].vy += drag * dvy * m2 / (m1 + m2);
-                self.bodies[i].vz += drag * dvz * m2 / (m1 + m2);
-                self.bodies[j].vx -= drag * dvx * m1 / (m1 + m2);
-                self.bodies[j].vy -= drag * dvy * m1 / (m1 + m2);
-                self.bodies[j].vz -= drag * dvz * m1 / (m1 + m2);
+                // Mass ratios for momentum conservation
+                let m2_ratio = m2 / total_mass;
+                let m1_ratio = m1 / total_mass;
+                
+                // Apply drag (reduce relative velocity while conserving momentum)
+                self.bodies[i].vx += drag * dvx * m2_ratio;
+                self.bodies[i].vy += drag * dvy * m2_ratio;
+                self.bodies[i].vz += drag * dvz * m2_ratio;
+                self.bodies[j].vx -= drag * dvx * m1_ratio;
+                self.bodies[j].vy -= drag * dvy * m1_ratio;
+                self.bodies[j].vz -= drag * dvz * m1_ratio;
             }
         }
     }
@@ -574,15 +615,20 @@ pub fn create_lagrange() -> Simulation {
 
 // Preset: Galaxy Collision
 // Two "galaxies" each with a massive central body and orbiting stars
+// Tuned for a realistic merger where most mass stays bound
 #[wasm_bindgen]
 pub fn create_galaxy_collision() -> Simulation {
     let mut sim = Simulation::new();
     
-    let core_mass = 1.0e32;  // Massive central body
-    let star_mass = 1.0e28;  // Small "star" mass
-    let galaxy_radius = 200.0e9;  // Galaxy radius
-    let separation = 800.0e9;  // Initial separation between galaxies
-    let approach_v = 15000.0;  // Approach velocity (m/s)
+    let core_mass = 2.0e32;  // Massive central body (increased for stronger binding)
+    let star_mass = 5.0e27;  // Smaller "star" mass (less likely to perturb cores)
+    let galaxy_radius = 150.0e9;  // Galaxy radius
+    let separation = 500.0e9;  // Initial separation (closer = more bound)
+    
+    // Calculate a gentle approach velocity (sub-escape, will merge not fly-by)
+    // Escape velocity from combined mass at this separation
+    let escape_v = (2.0 * G * 2.0 * core_mass / separation).sqrt();
+    let approach_v = escape_v * 0.3;  // 30% of escape velocity - gentle approach
     
     // Simple pseudo-random number generator (deterministic for reproducibility)
     let mut seed: u64 = 12345;
@@ -591,9 +637,10 @@ pub fn create_galaxy_collision() -> Simulation {
         ((seed >> 16) & 0x7fff) as f64 / 32768.0  // Returns 0.0 to 1.0
     };
     
-    // Galaxy 1 - centered at (-separation/2, 0), moving right
+    // Galaxy 1 - slight tangential velocity for spiral-in rather than head-on
     let g1_x = -separation / 2.0;
-    sim.add_body(Body::new_3d(g1_x, 0.0, 0.0, approach_v, 3000.0, 0.0, core_mass, 20.0));
+    let tangent_v = approach_v * 0.5;  // Some tangential motion
+    sim.add_body(Body::new_3d(g1_x, 0.0, 0.0, approach_v, tangent_v, 0.0, core_mass, 20.0));
     
     // Stars orbiting galaxy 1
     let stars_per_galaxy = 30;
@@ -602,28 +649,30 @@ pub fn create_galaxy_collision() -> Simulation {
         let base_angle = 2.0 * std::f64::consts::PI * (i as f64) / (stars_per_galaxy as f64);
         let angle = base_angle + (random() - 0.5) * 0.5;  // ±0.25 radians jitter
         
-        // Radius with randomness
-        let base_r = galaxy_radius * (0.3 + 0.7 * ((i % 3) as f64 + 1.0) / 3.0);
-        let r = base_r * (0.8 + 0.4 * random());  // 80% to 120% of base radius
+        // Radius with randomness - keep stars closer to core
+        let base_r = galaxy_radius * (0.2 + 0.6 * ((i % 3) as f64 + 1.0) / 3.0);
+        let r = base_r * (0.85 + 0.3 * random());  // 85% to 115% of base radius
         
         // Position with Z offset for 3D thickness
-        let z = galaxy_radius * 0.15 * (random() - 0.5);  // ±7.5% of radius in Z
+        let z = galaxy_radius * 0.12 * (random() - 0.5);  // ±6% of radius in Z
         let x = g1_x + r * angle.cos();
         let y = r * angle.sin();
         
         // Orbital velocity with slight inclination
         let v = (G * core_mass / r).sqrt();
-        let inclination = 0.1 * (random() - 0.5);  // Slight orbital tilt
+        let inclination = 0.08 * (random() - 0.5);  // Slight orbital tilt
         let vx = approach_v - v * angle.sin();
-        let vy = 3000.0 + v * angle.cos() * (1.0 - inclination.abs());
+        let vy = tangent_v + v * angle.cos() * (1.0 - inclination.abs());
         let vz = v * inclination;  // Z-component of velocity
         
         sim.add_body(Body::new_3d(x, y, z, vx, vy, vz, star_mass, 3.0));
     }
     
-    // Galaxy 2 - centered at (+separation/2, 0), tilted galactic plane
+    // Galaxy 2 - approaching from other side, tilted galactic plane
     let g2_x = separation / 2.0;
-    sim.add_body(Body::new_3d(g2_x, 100.0e9, 50.0e9, -approach_v, -3000.0, -1000.0, core_mass, 20.0));
+    let g2_y = 80.0e9;  // Slight offset for off-center collision
+    let g2_z = 40.0e9;
+    sim.add_body(Body::new_3d(g2_x, g2_y, g2_z, -approach_v, -tangent_v * 0.8, -tangent_v * 0.3, core_mass, 20.0));
     
     // Stars orbiting galaxy 2 (rotating opposite direction, different plane)
     for i in 0..stars_per_galaxy {
@@ -632,22 +681,22 @@ pub fn create_galaxy_collision() -> Simulation {
         let angle = base_angle + (random() - 0.5) * 0.5;
         
         // Radius with randomness
-        let base_r = galaxy_radius * (0.3 + 0.7 * ((i % 3) as f64 + 1.0) / 3.0);
-        let r = base_r * (0.8 + 0.4 * random());
+        let base_r = galaxy_radius * (0.2 + 0.6 * ((i % 3) as f64 + 1.0) / 3.0);
+        let r = base_r * (0.85 + 0.3 * random());
         
-        // Position - galaxy 2 is tilted ~30° relative to galaxy 1
-        let tilt: f64 = 0.5;  // ~30 degrees in radians
+        // Position - galaxy 2 is tilted ~25° relative to galaxy 1
+        let tilt: f64 = 0.4;  // ~25 degrees in radians
         let x = g2_x + r * angle.cos();
         let y_flat = r * angle.sin();
-        let y = 100.0e9 + y_flat * tilt.cos();
-        let z = 50.0e9 + y_flat * tilt.sin() + galaxy_radius * 0.1 * (random() - 0.5);
+        let y = g2_y + y_flat * tilt.cos();
+        let z = g2_z + y_flat * tilt.sin() + galaxy_radius * 0.08 * (random() - 0.5);
         
         // Orbital velocity (opposite rotation, tilted plane)
         let v = (G * core_mass / r).sqrt();
-        let inclination = 0.1 * (random() - 0.5);
+        let inclination = 0.08 * (random() - 0.5);
         let vx = -approach_v + v * angle.sin();
-        let vy = -3000.0 - v * angle.cos() * tilt.cos() * (1.0 - inclination.abs());
-        let vz = -1000.0 - v * angle.cos() * tilt.sin() + v * inclination;
+        let vy = -tangent_v * 0.8 - v * angle.cos() * tilt.cos() * (1.0 - inclination.abs());
+        let vz = -tangent_v * 0.3 - v * angle.cos() * tilt.sin() + v * inclination;
         
         sim.add_body(Body::new_3d(x, y, z, vx, vy, vz, star_mass, 3.0));
     }
