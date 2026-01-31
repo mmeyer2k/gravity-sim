@@ -108,7 +108,8 @@
     <canvas id="canvas"></canvas>
     
     <div id="controls">
-        <h1>🌌 Gravity Simulator</h1>
+        <h1 style="cursor: pointer; user-select: none;" onclick="toggleControls()">🌌 Gravity Simulator <span id="toggle-arrow" style="font-size: 0.6em; color: #666; margin-left: 5px;">▼</span></h1>
+        <div id="controls-body">
         
         <div class="control-group">
             <label>Preset Scenarios</label>
@@ -177,10 +178,37 @@
             <div>KE: <span class="stat-value" id="ke">0</span></div>
             <div>PE: <span class="stat-value" id="pe">0</span></div>
         </div>
+        </div>
     </div>
 
+    <script>
+        function toggleControls() {
+            const body = document.getElementById('controls-body');
+            const arrow = document.getElementById('toggle-arrow');
+            if (body.style.display === 'none') {
+                body.style.display = 'block';
+                arrow.textContent = '▼';
+            } else {
+                body.style.display = 'none';
+                arrow.textContent = '▶';
+            }
+        }
+        function toggleInstructions() {
+            const body = document.getElementById('instructions-body');
+            const arrow = document.getElementById('instructions-arrow');
+            if (body.style.display === 'none') {
+                body.style.display = 'block';
+                arrow.textContent = '▼';
+            } else {
+                body.style.display = 'none';
+                arrow.textContent = '▶';
+            }
+        }
+    </script>
+
     <div id="instructions">
-        <h3>Controls</h3>
+        <h3 style="cursor: pointer; user-select: none;" onclick="toggleInstructions()">Controls <span id="instructions-arrow" style="font-size: 0.7em; color: #666; margin-left: 5px;">▼</span></h3>
+        <div id="instructions-body">
         <p><kbd>Click</kbd> Add body at rest</p>
         <p><kbd>Drag</kbd> Add body with velocity</p>
         <p><kbd>Right-click</kbd> Remove nearest body</p>
@@ -189,11 +217,15 @@
         <p><kbd>Ctrl+Shift+drag</kbd> Rotate 3D view</p>
         <p><kbd>R</kbd> Reset view rotation</p>
         <p><kbd>Space</kbd> Pause/Resume</p>
+        <p><kbd>Ctrl+click</kbd> Follow body</p>
+        <p><kbd>Esc</kbd> Stop following</p>
+        </div>
     </div>
 
     <div id="velocity-indicator" style="display: none;"></div>
     <div id="body-tooltip" style="display: none; position: fixed; background: rgba(20, 20, 30, 0.95); padding: 10px; border-radius: 8px; border: 1px solid rgba(100, 100, 255, 0.3); font-size: 0.85em; pointer-events: none; z-index: 100;"></div>
     <div id="fps-counter" style="position: fixed; bottom: 20px; right: 20px; background: rgba(20, 20, 30, 0.8); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(100, 100, 255, 0.3); font-size: 0.85em; font-family: monospace; color: #8888ff;">FPS: --</div>
+    <div id="follow-indicator" style="display: none; position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(20, 20, 30, 0.9); padding: 10px 20px; border-radius: 8px; border: 1px solid rgba(100, 255, 100, 0.4); font-size: 0.9em; color: #8f8;">Following: --  <span style="color: #888; font-size: 0.8em;">(Esc to stop)</span></div>
 
     <script type="module">
         import init, { 
@@ -239,6 +271,9 @@
             let panStart = null;
             let rotateStart = null;
             let selectedColor = '#ffdd44';
+            
+            // Camera follow
+            let followBodyIndex = -1;  // -1 = not following any body
             
             // Mass presets
             const massPresets = [
@@ -364,6 +399,8 @@
                 }
                 initBodyMeta(name);
                 collisionFlashes = [];
+                followBodyIndex = -1;  // Stop following when changing presets
+                if (typeof updateFollowIndicator === 'function') updateFollowIndicator();
                 // Reset view (position, zoom, and 3D rotation)
                 viewX = canvas.width / 2;
                 viewY = canvas.height / 2;
@@ -476,6 +513,17 @@
                     ctx.arc(screen.x, screen.y, r, 0, Math.PI * 2);
                     ctx.fillStyle = color;
                     ctx.fill();
+                    
+                    // Draw follow indicator ring
+                    if (i === followBodyIndex) {
+                        ctx.beginPath();
+                        ctx.arc(screen.x, screen.y, r + 8, 0, Math.PI * 2);
+                        ctx.strokeStyle = '#44ff44';
+                        ctx.lineWidth = 2;
+                        ctx.setLineDash([4, 4]);
+                        ctx.stroke();
+                        ctx.setLineDash([]);
+                    }
 
                     // Velocity vector with arrow head (3D)
                     if (showVectors) {
@@ -663,6 +711,28 @@
                     }
                 }
                 
+                // Camera follow - center view on followed body
+                if (followBodyIndex >= 0 && followBodyIndex < sim.body_count()) {
+                    const fx = sim.get_body_x(followBodyIndex);
+                    const fy = sim.get_body_y(followBodyIndex);
+                    const fz = sim.get_body_z(followBodyIndex);
+                    // Apply 3D rotation to get screen position offset
+                    const cosZ = Math.cos(camRotZ);
+                    const sinZ = Math.sin(camRotZ);
+                    const rx = fx * cosZ - fy * sinZ;
+                    const ry = fx * sinZ + fy * cosZ;
+                    const cosX = Math.cos(camRotX);
+                    const sinX = Math.sin(camRotX);
+                    const ry2 = ry * cosX - fz * sinX;
+                    // Center the followed body on screen
+                    viewX = canvas.width / 2 - rx * zoom;
+                    viewY = canvas.height / 2 + ry2 * zoom;
+                } else if (followBodyIndex >= sim.body_count()) {
+                    // Body was removed (merged), stop following
+                    followBodyIndex = -1;
+                    updateFollowIndicator();
+                }
+                
                 draw();
                 requestAnimationFrame(update);
             }
@@ -700,6 +770,8 @@
             document.getElementById('clear-btn').addEventListener('click', () => {
                 sim.clear();
                 bodyMeta = [];
+                followBodyIndex = -1;
+                updateFollowIndicator();
             });
 
             document.getElementById('trails-toggle').addEventListener('change', (e) => {
@@ -742,6 +814,10 @@
                     // Ctrl+Shift+left-click = rotate 3D view
                     isRotating = true;
                     rotateStart = { x: e.clientX, y: e.clientY, camRotX, camRotZ };
+                    e.preventDefault();
+                } else if (e.button === 0 && e.ctrlKey && !e.shiftKey) {
+                    // Ctrl+click = follow body
+                    tryFollowBodyAt(e.clientX, e.clientY);
                     e.preventDefault();
                 } else if (e.button === 1 || (e.button === 0 && e.shiftKey && !e.ctrlKey)) {
                     // Middle-click or Shift+left-click (no Ctrl) = pan
@@ -887,6 +963,13 @@
                 if (nearestIdx >= 0 && nearestDist < 50e9 / zoom) {
                     sim.remove_body(nearestIdx);
                     bodyMeta.splice(nearestIdx, 1);
+                    // Update follow index if needed
+                    if (followBodyIndex === nearestIdx) {
+                        followBodyIndex = -1;
+                        updateFollowIndicator();
+                    } else if (followBodyIndex > nearestIdx) {
+                        followBodyIndex--;  // Adjust for removed body
+                    }
                 }
             });
 
@@ -905,11 +988,59 @@
                     document.getElementById('pause-btn').textContent = paused ? '▶️ Resume' : '⏸️ Pause';
                     e.preventDefault();
                 } else if (e.code === 'KeyR' && !e.ctrlKey) {
-                    // Reset camera rotation
+                    // Reset camera rotation and stop following
                     camRotX = 0;
                     camRotZ = 0;
+                    followBodyIndex = -1;
+                    updateFollowIndicator();
+                } else if (e.code === 'Escape') {
+                    // Stop following
+                    followBodyIndex = -1;
+                    updateFollowIndicator();
                 }
             });
+            
+            // Ctrl+click to follow a body (or unfollow if clicking same body)
+            function tryFollowBodyAt(x, y) {
+                for (let i = 0; i < sim.body_count(); i++) {
+                    const bx = sim.get_body_x(i);
+                    const by = sim.get_body_y(i);
+                    const bz = sim.get_body_z(i);
+                    const screen = worldToScreen(bx, by, bz);
+                    const r = sim.get_body_radius(i);
+                    const dx = x - screen.x;
+                    const dy = y - screen.y;
+                    const dist = Math.sqrt(dx*dx + dy*dy);
+                    
+                    if (dist < r + 15) {  // 15px margin for easier selection
+                        // Toggle: if already following this body, unfollow
+                        if (followBodyIndex === i) {
+                            followBodyIndex = -1;
+                        } else {
+                            followBodyIndex = i;
+                        }
+                        updateFollowIndicator();
+                        return true;
+                    }
+                }
+                // Clicked empty space - stop following
+                followBodyIndex = -1;
+                updateFollowIndicator();
+                return false;
+            }
+            
+            function updateFollowIndicator() {
+                const indicator = document.getElementById('follow-indicator');
+                if (followBodyIndex >= 0 && followBodyIndex < sim.body_count()) {
+                    const mass = sim.get_body_mass(followBodyIndex);
+                    const type = classifyMass(mass);
+                    const color = bodyMeta[followBodyIndex]?.color || '#fff';
+                    indicator.innerHTML = `<span style="color:${color}">●</span> Following: ${type}`;
+                    indicator.style.display = 'block';
+                } else {
+                    indicator.style.display = 'none';
+                }
+            }
 
             // Initialize - load whatever preset the dropdown shows
             const presetSelect = document.getElementById('preset');

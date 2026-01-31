@@ -528,24 +528,30 @@ pub fn create_lagrange() -> Simulation {
     let mu = earth_mass / (sun_mass + earth_mass);  // ~3e-6
     let alpha = (mu / 3.0_f64).powf(1.0 / 3.0);     // Hill sphere ratio
     
-    // L1: Between Sun and Earth (closer to Earth)
-    // Distance from Earth toward Sun: r * alpha (approx)
-    let l1_dist = earth_dist * (1.0 - alpha);
-    let l1_v = (G * sun_mass / l1_dist).sqrt();  // Orbital velocity at L1
-    sim.add_body(Body::new(l1_dist, 0.0, 0.0, l1_v, 1e15, 5.0));
+    // Angular velocity of Earth (L-points must co-rotate with Earth)
+    let omega = earth_v / earth_dist;
     
-    // L2: Beyond Earth (away from Sun)
+    // Test mass for L-point objects (very light, won't perturb system)
+    let test_mass = 1000.0;  // 1 ton - essentially massless
+    
+    // L1: Between Sun and Earth (on Sun-Earth line, sunward of Earth)
+    // Distance from Sun: r * (1 - alpha)
+    let l1_dist = earth_dist * (1.0 - alpha);
+    let l1_v = omega * l1_dist;  // Co-rotate with Earth
+    sim.add_body(Body::new(l1_dist, 0.0, 0.0, l1_v, test_mass, 5.0));
+    
+    // L2: Beyond Earth (on Sun-Earth line, anti-sunward of Earth)
+    // Distance from Sun: r * (1 + alpha)
     let l2_dist = earth_dist * (1.0 + alpha);
-    let l2_v = (G * sun_mass / l2_dist).sqrt();
-    sim.add_body(Body::new(l2_dist, 0.0, 0.0, l2_v, 1e15, 5.0));
+    let l2_v = omega * l2_dist;  // Co-rotate with Earth
+    sim.add_body(Body::new(l2_dist, 0.0, 0.0, l2_v, test_mass, 5.0));
     
     // L3: Opposite side of Sun from Earth
-    // Slightly outside Earth's orbit
-    let l3_dist = -earth_dist * (1.0 + 5.0 * mu / 12.0);
-    let l3_v = (G * sun_mass / earth_dist).sqrt();  // ~same orbital velocity
-    sim.add_body(Body::new(l3_dist, 0.0, 0.0, -l3_v, 1e15, 5.0));
+    let l3_dist = earth_dist * (1.0 + 5.0 * mu / 12.0);
+    let l3_v = omega * l3_dist;  // Co-rotate with Earth
+    sim.add_body(Body::new(-l3_dist, 0.0, 0.0, -l3_v, test_mass, 5.0));
     
-    // L4: 60° ahead of Earth (leading Trojan point)
+    // L4: 60° ahead of Earth (leading Trojan point) - STABLE
     // Forms equilateral triangle with Sun and Earth
     let angle_l4 = std::f64::consts::PI / 3.0;  // 60°
     let l4_x = earth_dist * angle_l4.cos();
@@ -553,15 +559,15 @@ pub fn create_lagrange() -> Simulation {
     // Velocity perpendicular to radius, same speed as Earth
     let l4_vx = -earth_v * angle_l4.sin();
     let l4_vy = earth_v * angle_l4.cos();
-    sim.add_body(Body::new(l4_x, l4_y, l4_vx, l4_vy, 1e15, 5.0));
+    sim.add_body(Body::new(l4_x, l4_y, l4_vx, l4_vy, test_mass, 5.0));
     
-    // L5: 60° behind Earth (trailing Trojan point)
+    // L5: 60° behind Earth (trailing Trojan point) - STABLE
     let angle_l5 = -std::f64::consts::PI / 3.0;  // -60°
     let l5_x = earth_dist * angle_l5.cos();
     let l5_y = earth_dist * angle_l5.sin();
     let l5_vx = -earth_v * angle_l5.sin();
     let l5_vy = earth_v * angle_l5.cos();
-    sim.add_body(Body::new(l5_x, l5_y, l5_vx, l5_vy, 1e15, 5.0));
+    sim.add_body(Body::new(l5_x, l5_y, l5_vx, l5_vy, test_mass, 5.0));
     
     sim
 }
