@@ -44,7 +44,7 @@ fn estimate_physical_radius(mass: f64) -> f64 {
     // - Rocky bodies (asteroids, planets): ~5000 kg/m³
     // - Gas giants: ~1300 kg/m³  
     // - Stars: ~1400 kg/m³
-    // - Neutron stars: ~4e17 kg/m³
+    // - Neutron stars: ~4e17 kg/m³ (mass 1.4-3 solar masses, radius ~10-15km)
     
     let density = if mass < 1e20 {
         3000.0  // Asteroid
@@ -52,10 +52,12 @@ fn estimate_physical_radius(mass: f64) -> f64 {
         5000.0  // Rocky planet
     } else if mass < 1e28 {
         1300.0  // Gas giant
-    } else if mass < 1e31 {
-        1400.0  // Star
+    } else if mass < 2.5e30 {
+        1400.0  // Star (up to ~1.25 solar masses)
+    } else if mass < 6e30 {
+        4.0e17  // Neutron star (~1.25-3 solar masses, ultra-dense)
     } else {
-        4.0e17  // Neutron star (super dense)
+        1400.0  // Massive star / supergiant
     };
     
     // V = 4/3 * pi * r³, m = density * V
@@ -266,10 +268,13 @@ impl Simulation {
     /// Apply gravitational wave radiation energy loss (Peters formula approximation)
     /// This causes orbits to decay over time, simulating inspiral
     /// Reference: Peters, P.C. (1964) "Gravitational Radiation and the Motion of Two Point Masses"
+    /// 
+    /// NOTE: The effect is boosted by 10^15 for visualization purposes.
+    /// Real GW inspiral at these separations takes millions of years.
     fn apply_gw_drag(&mut self, dt: f64) {
         let n = self.bodies.len();
-        // Pre-factor: 32/5 * G^4 / c^5
-        let gw_factor = (32.0 / 5.0) * G.powi(4) / C.powi(5);
+        // Pre-factor: 32/5 * G^4 / c^5, boosted for visibility
+        let gw_factor = (32.0 / 5.0) * G.powi(4) / C.powi(5) * 1.0e15;
         
         for i in 0..n {
             for j in (i + 1)..n {
@@ -306,21 +311,42 @@ impl Simulation {
                 // Fraction of energy to remove (capped to prevent instability)
                 let fraction = (energy_loss / kinetic_energy).min(0.01);
                 
-                // Apply drag as reduction in relative velocity
-                // This removes energy from the orbit, causing inspiral
+                // To cause inspiral, we need to remove orbital energy by applying
+                // tangential drag (opposite to the direction of motion).
+                // 
+                // The tangential velocity is the component perpendicular to the radial direction.
+                // Reducing tangential speed removes angular momentum and causes inspiral.
+                
                 let drag = fraction * 0.5;  // Split between both bodies
+                
+                // Unit vector from i to j (radial direction)
+                let inv_dist = 1.0 / dist;
+                let rx = dx * inv_dist;
+                let ry = dy * inv_dist;
+                let rz = dz * inv_dist;
+                
+                // Radial component of relative velocity
+                let v_radial = dvx * rx + dvy * ry + dvz * rz;
+                
+                // Tangential component of relative velocity (what we want to reduce)
+                let dvx_tan = dvx - v_radial * rx;
+                let dvy_tan = dvy - v_radial * ry;
+                let dvz_tan = dvz - v_radial * rz;
                 
                 // Mass ratios for momentum conservation
                 let m2_ratio = m2 / total_mass;
                 let m1_ratio = m1 / total_mass;
                 
-                // Apply drag (reduce relative velocity while conserving momentum)
-                self.bodies[i].vx += drag * dvx * m2_ratio;
-                self.bodies[i].vy += drag * dvy * m2_ratio;
-                self.bodies[i].vz += drag * dvz * m2_ratio;
-                self.bodies[j].vx -= drag * dvx * m1_ratio;
-                self.bodies[j].vy -= drag * dvy * m1_ratio;
-                self.bodies[j].vz -= drag * dvz * m1_ratio;
+                // Apply drag to tangential velocity only
+                // This reduces angular momentum, causing inspiral
+                // Body i: moves toward j's tangential velocity (reduces relative tangential v)
+                // Body j: moves toward i's tangential velocity
+                self.bodies[i].vx += drag * dvx_tan * m2_ratio;
+                self.bodies[i].vy += drag * dvy_tan * m2_ratio;
+                self.bodies[i].vz += drag * dvz_tan * m2_ratio;
+                self.bodies[j].vx -= drag * dvx_tan * m1_ratio;
+                self.bodies[j].vy -= drag * dvy_tan * m1_ratio;
+                self.bodies[j].vz -= drag * dvz_tan * m1_ratio;
             }
         }
     }
@@ -431,28 +457,88 @@ impl Simulation {
 pub fn create_solar_system() -> Simulation {
     let mut sim = Simulation::new();
     
+    // Orbital inclinations relative to ecliptic (in radians)
+    let incl_mercury = 7.00_f64.to_radians();
+    let incl_venus = 3.39_f64.to_radians();
+    let incl_moon = 5.14_f64.to_radians();  // Moon's orbit inclined to ecliptic
+    let incl_mars = 1.85_f64.to_radians();
+    let incl_jupiter = 1.31_f64.to_radians();
+    let incl_saturn = 2.49_f64.to_radians();
+    let incl_uranus = 0.77_f64.to_radians();
+    let incl_neptune = 1.77_f64.to_radians();
+    
     let sun_mass = 1.989e30;
     sim.add_body(Body::new(0.0, 0.0, 0.0, 0.0, sun_mass, 30.0));
     
-    // Earth: 1 AU = 150e9 m, orbital velocity ~29,780 m/s
-    let earth_dist = 150.0e9;
-    let earth_v = (G * sun_mass / earth_dist).sqrt();
-    sim.add_body(Body::new(earth_dist, 0.0, 0.0, earth_v, 5.972e24, 8.0));
-    
-    // Mars: 1.52 AU
-    let mars_dist = 228.0e9;
-    let mars_v = (G * sun_mass / mars_dist).sqrt();
-    sim.add_body(Body::new(0.0, mars_dist, -mars_v, 0.0, 6.39e23, 6.0));
-    
-    // Venus: 0.72 AU
-    let venus_dist = 108.0e9;
-    let venus_v = (G * sun_mass / venus_dist).sqrt();
-    sim.add_body(Body::new(-venus_dist, 0.0, 0.0, -venus_v, 4.867e24, 7.0));
-    
-    // Mercury: 0.39 AU
-    let mercury_dist = 58.0e9;
+    // Mercury: 0.387 AU, mass 3.301e23 kg, incl 7.00°
+    let mercury_dist = 5.79e10;
     let mercury_v = (G * sun_mass / mercury_dist).sqrt();
-    sim.add_body(Body::new(0.0, -mercury_dist, mercury_v, 0.0, 3.285e23, 4.0));
+    // Position at (r, 0, 0), velocity in +y tilted by inclination
+    let vy = mercury_v * incl_mercury.cos();
+    let vz = mercury_v * incl_mercury.sin();
+    sim.add_body(Body::new_3d(mercury_dist, 0.0, 0.0, 0.0, vy, vz, 3.301e23, 4.0));
+    
+    // Venus: 0.723 AU, mass 4.867e24 kg, incl 3.39°
+    let venus_dist = 1.082e11;
+    let venus_v = (G * sun_mass / venus_dist).sqrt();
+    // Position at (0, r, 0) -> inclined to (0, r*cos(i), r*sin(i))
+    let y = venus_dist * incl_venus.cos();
+    let z = venus_dist * incl_venus.sin();
+    // Velocity in -x direction (no inclination effect on vx)
+    sim.add_body(Body::new_3d(0.0, y, z, -venus_v, 0.0, 0.0, 4.867e24, 7.0));
+    
+    // Earth: 1 AU, mass 5.972e24 kg, incl 0° (reference plane)
+    let earth_dist = 1.496e11;
+    let earth_v = (G * sun_mass / earth_dist).sqrt();
+    let earth_mass = 5.972e24;
+    sim.add_body(Body::new_3d(-earth_dist, 0.0, 0.0, 0.0, -earth_v, 0.0, earth_mass, 8.0));
+    
+    // Moon: 384,400 km from Earth, mass 7.342e22 kg, incl 5.14° to ecliptic
+    let moon_dist_from_earth = 3.844e8;
+    let moon_orbital_v = (G * earth_mass / moon_dist_from_earth).sqrt();
+    // Moon positioned "above" Earth in y, tilted by its inclination
+    let moon_y = moon_dist_from_earth * incl_moon.cos();
+    let moon_z = moon_dist_from_earth * incl_moon.sin();
+    // Moon velocity = Earth's velocity + orbital velocity around Earth (tilted)
+    let moon_vx = -moon_orbital_v * incl_moon.cos();
+    let moon_vz_orbit = -moon_orbital_v * incl_moon.sin();
+    sim.add_body(Body::new_3d(-earth_dist, moon_y, moon_z, moon_vx, -earth_v, moon_vz_orbit, 7.342e22, 3.0));
+    
+    // Mars: 1.524 AU, mass 6.417e23 kg, incl 1.85°
+    let mars_dist = 2.279e11;
+    let mars_v = (G * sun_mass / mars_dist).sqrt();
+    // Position at (0, -r, 0) -> inclined
+    let y = -mars_dist * incl_mars.cos();
+    let z = -mars_dist * incl_mars.sin();
+    sim.add_body(Body::new_3d(0.0, y, z, mars_v, 0.0, 0.0, 6.417e23, 5.0));
+    
+    // Jupiter: 5.203 AU, mass 1.898e27 kg, incl 1.31°
+    let jupiter_dist = 7.785e11;
+    let jupiter_v = (G * sun_mass / jupiter_dist).sqrt();
+    let vy = jupiter_v * incl_jupiter.cos();
+    let vz = jupiter_v * incl_jupiter.sin();
+    sim.add_body(Body::new_3d(jupiter_dist, 0.0, 0.0, 0.0, vy, vz, 1.898e27, 18.0));
+    
+    // Saturn: 9.537 AU, mass 5.683e26 kg, incl 2.49°
+    let saturn_dist = 1.432e12;
+    let saturn_v = (G * sun_mass / saturn_dist).sqrt();
+    let y = saturn_dist * incl_saturn.cos();
+    let z = saturn_dist * incl_saturn.sin();
+    sim.add_body(Body::new_3d(0.0, y, z, -saturn_v, 0.0, 0.0, 5.683e26, 15.0));
+    
+    // Uranus: 19.19 AU, mass 8.681e25 kg, incl 0.77°
+    let uranus_dist = 2.867e12;
+    let uranus_v = (G * sun_mass / uranus_dist).sqrt();
+    let vy = -uranus_v * incl_uranus.cos();
+    let vz = -uranus_v * incl_uranus.sin();
+    sim.add_body(Body::new_3d(-uranus_dist, 0.0, 0.0, 0.0, vy, vz, 8.681e25, 10.0));
+    
+    // Neptune: 30.07 AU, mass 1.024e26 kg, incl 1.77°
+    let neptune_dist = 4.515e12;
+    let neptune_v = (G * sun_mass / neptune_dist).sqrt();
+    let y = -neptune_dist * incl_neptune.cos();
+    let z = -neptune_dist * incl_neptune.sin();
+    sim.add_body(Body::new_3d(0.0, y, z, neptune_v, 0.0, 0.0, 1.024e26, 10.0));
 
     sim
 }

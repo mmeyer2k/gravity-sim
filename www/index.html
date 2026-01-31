@@ -155,12 +155,9 @@
             </div>
         </div>
 
-        <div class="control-group">
-            <button id="pause-btn">⏸️ Pause</button>
-        </div>
-
-        <div class="control-group">
-            <button id="clear-btn" class="danger">🗑️ Clear All</button>
+        <div class="control-group" style="display: flex; gap: 8px;">
+            <button id="pause-btn" style="flex: 1;">⏸️ Pause</button>
+            <button id="clear-btn" class="danger" style="flex: 1;">🗑️ Clear All</button>
         </div>
 
         <div class="control-group">
@@ -172,6 +169,11 @@
         <div class="control-group">
             <label>Trail Length: <span id="trail-value">500</span></label>
             <input type="range" id="trail-slider" min="50" max="2000" step="50" value="500">
+        </div>
+
+        <div class="control-group">
+            <label>Body Size: <span id="size-value">Exaggerated</span></label>
+            <input type="range" id="size-slider" min="0" max="100" step="1" value="100">
         </div>
 
         <div class="stats">
@@ -250,6 +252,7 @@
             let showTrails = true;
             let showVectors = false;
             let timeScale = 1.0;
+            let sizeScale = 1.0;  // 0 = realistic, 1 = exaggerated
             
             // View transform
             let viewX = 0;
@@ -364,8 +367,28 @@
 
             function initBodyMeta(preset = null) {
                 bodyMeta = [];
+                // Special colors for solar system
+                if (preset === 'solar') {
+                    const solarColors = [
+                        '#ffdd44',  // Sun (yellow)
+                        '#b0b0b0',  // Mercury (gray)
+                        '#e6c87a',  // Venus (pale yellow)
+                        '#4488ff',  // Earth (blue)
+                        '#aaaaaa',  // Moon (gray)
+                        '#dd6644',  // Mars (red-orange)
+                        '#ddaa77',  // Jupiter (tan/orange)
+                        '#eecc88',  // Saturn (pale gold)
+                        '#88dddd',  // Uranus (cyan)
+                        '#5588ff',  // Neptune (blue)
+                    ];
+                    for (let i = 0; i < sim.body_count(); i++) {
+                        bodyMeta.push({
+                            color: solarColors[i] || '#ffffff',
+                            trail: []
+                        });
+                    }
                 // Special colors for Lagrange points preset to identify each L-point
-                if (preset === 'lagrange') {
+                } else if (preset === 'lagrange') {
                     const lagrangeColors = [
                         '#ffdd44',  // Sun (yellow)
                         '#4488ff',  // Earth (blue)
@@ -431,8 +454,9 @@
                 if (mass < 1e26) return 'Planet';
                 if (mass < 1e28) return 'Gas Giant';
                 if (mass < 1e29) return 'Brown Dwarf';
-                if (mass < 5e30) return 'Star';
-                return 'Neutron Star';
+                if (mass < 2.5e30) return 'Star';  // Up to ~1.25 solar masses
+                if (mass < 6e30) return 'Neutron Star';  // ~1.25-3 solar masses
+                return 'Massive Star';  // Supergiants
             }
             
             function formatMass(mass) {
@@ -446,10 +470,11 @@
             }
             
             function formatRadius(radius) {
+                // radius is in meters
                 if (radius >= 1e9) {
-                    return (radius / 1e9).toFixed(2) + ' M km';
+                    return (radius / 1e9).toFixed(2) + ' M km';  // million km
                 } else if (radius >= 1e6) {
-                    return (radius / 1e6).toFixed(0) + ' km';
+                    return (radius / 1e3).toFixed(0).replace(/\B(?=(\d{3})+(?!\d))/g, ',') + ' km';
                 } else if (radius >= 1e3) {
                     return (radius / 1e3).toFixed(1) + ' km';
                 } else {
@@ -511,7 +536,12 @@
                     const x = sim.get_body_x(i);
                     const y = sim.get_body_y(i);
                     const z = sim.get_body_z(i);
-                    const r = sim.get_body_radius(i);
+                    const exaggeratedR = sim.get_body_radius(i);
+                    const physicalR = sim.get_body_physical_radius(i);
+                    // Realistic screen radius (physical size at current zoom, min 2px)
+                    const realisticR = Math.max(2, physicalR * zoom);
+                    // Interpolate between realistic and exaggerated based on sizeScale
+                    const r = realisticR + (exaggeratedR - realisticR) * sizeScale;
                     const screen = worldToScreen(x, y, z);
                     const color = bodyMeta[i]?.color || '#ffffff';
                     
@@ -539,12 +569,13 @@
                         const speed = Math.sqrt(vx*vx + vy*vy + vz*vz);
                         
                         if (speed > 10) { // Only draw if moving
-                            // Project velocity endpoint in 3D
-                            const arrowScale = Math.min(150, Math.max(40, speed / 400)) / speed;
+                            // Proportional arrow: length = speed * constant scale
+                            // Scale factor chosen so ~30 km/s (Earth orbital) gives reasonable arrow length
+                            const arrowScale = 1e6;
                             const endWorld = {
-                                x: x + vx * arrowScale * 1e9,
-                                y: y + vy * arrowScale * 1e9,
-                                z: z + vz * arrowScale * 1e9
+                                x: x + vx * arrowScale,
+                                y: y + vy * arrowScale,
+                                z: z + vz * arrowScale
                             };
                             const endScreen = worldToScreen(endWorld.x, endWorld.y, endWorld.z);
                             
@@ -845,6 +876,12 @@
                 const grav = parseFloat(e.target.value);
                 sim.set_gravity_mult(grav);
                 document.getElementById('gravity-value').textContent = grav + 'x';
+            });
+
+            document.getElementById('size-slider').addEventListener('input', (e) => {
+                sizeScale = parseFloat(e.target.value) / 100;
+                const label = sizeScale < 0.33 ? 'Realistic' : sizeScale < 0.66 ? 'Mixed' : 'Exaggerated';
+                document.getElementById('size-value').textContent = label;
             });
 
             document.getElementById('mass-slider').addEventListener('input', (e) => {
