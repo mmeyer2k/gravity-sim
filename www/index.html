@@ -1117,6 +1117,11 @@
             canvas.addEventListener('contextmenu', (e) => {
                 e.preventDefault();
                 
+                // On Mac, Ctrl+click fires contextmenu - don't remove bodies during 3D rotation
+                if (isRotating || (e.ctrlKey && e.shiftKey)) {
+                    return;
+                }
+                
                 // If dragging to create a body, cancel it
                 if (isDragging) {
                     isDragging = false;
