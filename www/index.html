@@ -228,6 +228,7 @@
     <div id="velocity-indicator" style="display: none;"></div>
     <div id="body-tooltip" style="display: none; position: fixed; background: rgba(20, 20, 30, 0.95); padding: 10px; border-radius: 8px; border: 1px solid rgba(100, 100, 255, 0.3); font-size: 0.85em; pointer-events: none; z-index: 100;"></div>
     <div id="fps-counter" style="position: fixed; bottom: 20px; right: 20px; background: rgba(20, 20, 30, 0.8); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(100, 100, 255, 0.3); font-size: 0.85em; font-family: monospace; color: #8888ff;">FPS: --</div>
+    <div id="zoom-indicator" style="position: fixed; bottom: 150px; right: 20px; background: rgba(20, 20, 30, 0.8); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(100, 100, 255, 0.3); font-size: 0.85em; font-family: monospace; color: #8888ff; min-width: 80px; text-align: center;">Zoom: --</div>
     <div id="orientation-widget" style="position: fixed; bottom: 60px; right: 20px; width: 80px; height: 80px;">
         <canvas id="orientation-canvas" width="80" height="80" style="background: rgba(20, 20, 30, 0.8); border-radius: 8px; border: 1px solid rgba(100, 100, 255, 0.3);"></canvas>
     </div>
@@ -667,6 +668,47 @@
                 
                 // Draw orientation widget
                 drawOrientationWidget();
+                
+                // Update zoom indicator
+                updateZoomIndicator();
+            }
+            
+            // Format zoom level for display
+            function formatZoom(zoom) {
+                // zoom = pixels per meter
+                // Calculate what distance 100 screen pixels represents
+                const metersPerPixel = 1 / zoom;
+                const distancePer100px = metersPerPixel * 100;
+                
+                const AU = 1.496e11;  // 1 AU in meters
+                const kmPerMeter = 0.001;
+                
+                if (distancePer100px >= AU * 10) {
+                    // Show in AU
+                    const auPer100px = distancePer100px / AU;
+                    if (auPer100px >= 100) {
+                        return `${(auPer100px).toFixed(0)} AU`;
+                    } else if (auPer100px >= 10) {
+                        return `${(auPer100px).toFixed(1)} AU`;
+                    } else {
+                        return `${(auPer100px).toFixed(2)} AU`;
+                    }
+                } else if (distancePer100px >= 1e9) {
+                    // Show in million km
+                    return `${(distancePer100px / 1e9).toFixed(1)}M km`;
+                } else if (distancePer100px >= 1e6) {
+                    // Show in thousand km
+                    return `${(distancePer100px / 1e6).toFixed(0)}k km`;
+                } else {
+                    // Show in km
+                    return `${(distancePer100px / 1e3).toFixed(0)} km`;
+                }
+            }
+            
+            function updateZoomIndicator() {
+                const indicator = document.getElementById('zoom-indicator');
+                const scaleText = formatZoom(zoom);
+                indicator.innerHTML = `<span style="color: #aaa; font-size: 0.8em;">100px =</span><br>${scaleText}`;
             }
             
             // Draw 3D orientation axis indicator
