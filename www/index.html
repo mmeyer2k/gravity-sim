@@ -168,7 +168,7 @@
 
         <div class="control-group">
             <label>Trail Length: <span id="trail-value">500</span></label>
-            <input type="range" id="trail-slider" min="50" max="2000" step="50" value="500">
+            <input type="range" id="trail-slider" min="0" max="100" step="1" value="24">
         </div>
 
         <div class="control-group">
@@ -851,16 +851,19 @@
                         bodyMeta.pop();
                     }
                     
-                    // Update trails (3D)
-                    for (let i = 0; i < sim.body_count(); i++) {
-                        if (bodyMeta[i]) {
-                            bodyMeta[i].trail.push({
-                                x: sim.get_body_x(i),
-                                y: sim.get_body_y(i),
-                                z: sim.get_body_z(i)
-                            });
-                            if (bodyMeta[i].trail.length > maxTrailLength) {
-                                bodyMeta[i].trail.shift();
+                    // Update trails (3D) - only if trails are enabled
+                    if (maxTrailLength > 0) {
+                        for (let i = 0; i < sim.body_count(); i++) {
+                            if (bodyMeta[i]) {
+                                bodyMeta[i].trail.push({
+                                    x: sim.get_body_x(i),
+                                    y: sim.get_body_y(i),
+                                    z: sim.get_body_z(i)
+                                });
+                                // Only trim if not infinite
+                                if (maxTrailLength !== Infinity && bodyMeta[i].trail.length > maxTrailLength) {
+                                    bodyMeta[i].trail.shift();
+                                }
                             }
                         }
                     }
@@ -959,14 +962,27 @@
             });
 
             document.getElementById('trail-slider').addEventListener('input', (e) => {
-                maxTrailLength = parseInt(e.target.value);
-                document.getElementById('trail-value').textContent = maxTrailLength;
-                // Trim existing trails if needed
-                bodyMeta.forEach(m => {
-                    if (m.trail.length > maxTrailLength) {
-                        m.trail = m.trail.slice(-maxTrailLength);
-                    }
-                });
+                const sliderVal = parseInt(e.target.value);
+                // Map slider: 0 = off, 1-99 = 50-2000, 100 = infinity
+                if (sliderVal === 0) {
+                    maxTrailLength = 0;
+                    document.getElementById('trail-value').textContent = 'Off';
+                    // Clear all trails
+                    bodyMeta.forEach(m => m.trail = []);
+                } else if (sliderVal === 100) {
+                    maxTrailLength = Infinity;
+                    document.getElementById('trail-value').textContent = '∞';
+                } else {
+                    // Linear map 1-99 to 50-2000
+                    maxTrailLength = Math.round(50 + (sliderVal - 1) * (2000 - 50) / 98);
+                    document.getElementById('trail-value').textContent = maxTrailLength;
+                    // Trim existing trails if needed
+                    bodyMeta.forEach(m => {
+                        if (m.trail.length > maxTrailLength) {
+                            m.trail = m.trail.slice(-maxTrailLength);
+                        }
+                    });
+                }
             });
 
             // Color picker
@@ -1226,8 +1242,8 @@
             document.getElementById('time-value').textContent = timeScale + 'x';
             
             const trailSlider = document.getElementById('trail-slider');
-            maxTrailLength = parseInt(trailSlider.value);
-            document.getElementById('trail-value').textContent = maxTrailLength;
+            // Initialize trail length from slider (dispatch event to run the mapping logic)
+            trailSlider.dispatchEvent(new Event('input'));
             
             const gravitySlider = document.getElementById('gravity-slider');
             sim.set_gravity_mult(parseFloat(gravitySlider.value));
