@@ -161,7 +161,6 @@
         </div>
 
         <div class="control-group">
-            <label><input type="checkbox" id="trails-toggle" checked> Show Trails</label>
             <label><input type="checkbox" id="vectors-toggle"> Show Velocity</label>
             <label><input type="checkbox" id="collisions-toggle" checked> Enable Collisions</label>
         </div>
@@ -250,7 +249,6 @@
             // State
             let sim = null;  // Will be set during init
             let paused = false;
-            let showTrails = true;
             let showVectors = false;
             let timeScale = 1.0;
             let sizeScale = 1.0;  // 0 = realistic, 1 = exaggerated
@@ -514,7 +512,7 @@
                 }
 
                 // Draw trails (3D)
-                if (showTrails) {
+                if (maxTrailLength > 0) {
                     for (let i = 0; i < bodyMeta.length; i++) {
                         const meta = bodyMeta[i];
                         if (meta.trail.length < 2) continue;
@@ -948,11 +946,6 @@
                 updateFollowIndicator();
             });
 
-            document.getElementById('trails-toggle').addEventListener('change', (e) => {
-                showTrails = e.target.checked;
-                if (!showTrails) bodyMeta.forEach(m => m.trail = []);
-            });
-
             document.getElementById('vectors-toggle').addEventListener('change', (e) => {
                 showVectors = e.target.checked;
             });
@@ -1258,7 +1251,6 @@
             }
             
             // Sync checkboxes with JS state
-            showTrails = document.getElementById('trails-toggle').checked;
             showVectors = document.getElementById('vectors-toggle').checked;
             
             update();
