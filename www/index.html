@@ -248,7 +248,14 @@
     <div id="velocity-indicator" style="display: none;"></div>
     <div id="body-tooltip" style="display: none; position: fixed; background: rgba(20, 20, 30, 0.95); padding: 10px; border-radius: 8px; border: 1px solid rgba(100, 100, 255, 0.3); font-size: 0.85em; pointer-events: none; z-index: 100;"></div>
     <div id="fps-counter" style="position: fixed; bottom: 20px; right: 20px; background: rgba(20, 20, 30, 0.8); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(100, 100, 255, 0.3); font-size: 0.85em; font-family: monospace; color: #8888ff;">FPS: --</div>
-    <div id="zoom-indicator" style="position: fixed; bottom: 150px; right: 20px; background: rgba(20, 20, 30, 0.8); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(100, 100, 255, 0.3); font-size: 0.85em; font-family: monospace; color: #8888ff; min-width: 80px; text-align: center;">Zoom: --</div>
+    <div id="scale-bar" style="position: fixed; bottom: 150px; right: 20px; background: rgba(20, 20, 30, 0.8); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(100, 100, 255, 0.3); font-size: 0.75em; font-family: monospace; color: #8888ff; text-align: center;">
+        <div style="display: flex; align-items: center; justify-content: center;">
+            <div style="width: 2px; height: 8px; background: #8888ff;"></div>
+            <div style="width: 100px; height: 2px; background: #8888ff;"></div>
+            <div style="width: 2px; height: 8px; background: #8888ff;"></div>
+        </div>
+        <div id="scale-label" style="margin-top: 4px;">--</div>
+    </div>
     <div id="orientation-widget" style="position: fixed; bottom: 60px; right: 20px; width: 80px; height: 80px;">
         <canvas id="orientation-canvas" width="80" height="80" style="background: rgba(20, 20, 30, 0.8); border-radius: 8px; border: 1px solid rgba(100, 100, 255, 0.3);"></canvas>
     </div>
@@ -725,9 +732,9 @@
             }
             
             function updateZoomIndicator() {
-                const indicator = document.getElementById('zoom-indicator');
+                const scaleLabel = document.getElementById('scale-label');
                 const scaleText = formatZoom(zoom);
-                indicator.innerHTML = `<span style="color: #aaa; font-size: 0.8em;">100px =</span><br>${scaleText}`;
+                scaleLabel.textContent = scaleText;
             }
             
             // Draw 3D orientation axis indicator
