@@ -221,6 +221,12 @@
                 arrow.textContent = '▶';
             }
         }
+        // Show Cmd instead of Ctrl on Mac
+        document.addEventListener('DOMContentLoaded', () => {
+            if (navigator.platform.toUpperCase().indexOf('MAC') >= 0) {
+                document.querySelectorAll('.mod-key').forEach(el => el.textContent = 'Cmd');
+            }
+        });
     </script>
 
     <div id="instructions">
@@ -231,10 +237,10 @@
         <p><kbd>Right-click</kbd> Remove nearest body</p>
         <p><kbd>Scroll</kbd> Zoom in/out</p>
         <p><kbd>Shift+drag</kbd> Pan view</p>
-        <p><kbd>Ctrl+Shift+drag</kbd> Rotate 3D view</p>
+        <p><kbd class="mod-key">Ctrl</kbd><kbd>+Shift+drag</kbd> Rotate 3D view</p>
         <p><kbd>R</kbd> Reset view rotation</p>
         <p><kbd>Space</kbd> Pause/Resume</p>
-        <p><kbd>Ctrl+click</kbd> Follow body</p>
+        <p><kbd class="mod-key">Ctrl</kbd><kbd>+click</kbd> Follow body</p>
         <p><kbd>Esc</kbd> Stop following</p>
         </div>
     </div>
