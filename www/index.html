@@ -1005,16 +1005,17 @@
 
             // Mouse interaction
             canvas.addEventListener('mousedown', (e) => {
-                if (e.button === 0 && e.ctrlKey && e.shiftKey) {
-                    // Ctrl+Shift+left-click = rotate 3D view
+                const modKey = e.ctrlKey || e.metaKey;  // Ctrl on Win/Linux, Cmd on Mac
+                if (e.button === 0 && modKey && e.shiftKey) {
+                    // Ctrl/Cmd+Shift+left-click = rotate 3D view
                     isRotating = true;
                     rotateStart = { x: e.clientX, y: e.clientY, camRotX, camRotZ };
                     e.preventDefault();
-                } else if (e.button === 0 && e.ctrlKey && !e.shiftKey) {
-                    // Ctrl+click = follow body
+                } else if (e.button === 0 && modKey && !e.shiftKey) {
+                    // Ctrl/Cmd+click = follow body
                     tryFollowBodyAt(e.clientX, e.clientY);
                     e.preventDefault();
-                } else if (e.button === 1 || (e.button === 0 && e.shiftKey && !e.ctrlKey)) {
+                } else if (e.button === 1 || (e.button === 0 && e.shiftKey && !modKey)) {
                     // Middle-click or Shift+left-click (no Ctrl) = pan
                     isPanning = true;
                     panStart = { x: e.clientX, y: e.clientY, viewX, viewY };
@@ -1133,7 +1134,7 @@
                 e.preventDefault();
                 
                 // On Mac, Ctrl+click fires contextmenu - don't remove bodies during 3D rotation
-                if (isRotating || (e.ctrlKey && e.shiftKey)) {
+                if (isRotating || ((e.ctrlKey || e.metaKey) && e.shiftKey)) {
                     return;
                 }
                 
