@@ -452,7 +452,7 @@ impl Simulation {
     }
 }
 
-// Preset: Solar system
+// Preset: Solar system with all major moons
 #[wasm_bindgen]
 pub fn create_solar_system() -> Simulation {
     let mut sim = Simulation::new();
@@ -473,7 +473,6 @@ pub fn create_solar_system() -> Simulation {
     // Mercury: 0.387 AU, mass 3.301e23 kg, incl 7.00°
     let mercury_dist = 5.79e10;
     let mercury_v = (G * sun_mass / mercury_dist).sqrt();
-    // Position at (r, 0, 0), velocity in +y tilted by inclination
     let vy = mercury_v * incl_mercury.cos();
     let vz = mercury_v * incl_mercury.sin();
     sim.add_body(Body::new_3d(mercury_dist, 0.0, 0.0, 0.0, vy, vz, 3.301e23, 4.0));
@@ -481,64 +480,165 @@ pub fn create_solar_system() -> Simulation {
     // Venus: 0.723 AU, mass 4.867e24 kg, incl 3.39°
     let venus_dist = 1.082e11;
     let venus_v = (G * sun_mass / venus_dist).sqrt();
-    // Position at (0, r, 0) -> inclined to (0, r*cos(i), r*sin(i))
     let y = venus_dist * incl_venus.cos();
     let z = venus_dist * incl_venus.sin();
-    // Velocity in -x direction (no inclination effect on vx)
     sim.add_body(Body::new_3d(0.0, y, z, -venus_v, 0.0, 0.0, 4.867e24, 7.0));
     
-    // Earth: 1 AU, mass 5.972e24 kg, incl 0° (reference plane)
+    // ========== EARTH SYSTEM ==========
     let earth_dist = 1.496e11;
     let earth_v = (G * sun_mass / earth_dist).sqrt();
     let earth_mass = 5.972e24;
-    sim.add_body(Body::new_3d(-earth_dist, 0.0, 0.0, 0.0, -earth_v, 0.0, earth_mass, 8.0));
+    let earth_x = -earth_dist;
+    let earth_vy = -earth_v;
+    sim.add_body(Body::new_3d(earth_x, 0.0, 0.0, 0.0, earth_vy, 0.0, earth_mass, 8.0));
     
-    // Moon: 384,400 km from Earth, mass 7.342e22 kg, incl 5.14° to ecliptic
-    let moon_dist_from_earth = 3.844e8;
-    let moon_orbital_v = (G * earth_mass / moon_dist_from_earth).sqrt();
-    // Moon positioned "above" Earth in y, tilted by its inclination
-    let moon_y = moon_dist_from_earth * incl_moon.cos();
-    let moon_z = moon_dist_from_earth * incl_moon.sin();
-    // Moon velocity = Earth's velocity + orbital velocity around Earth (tilted)
-    let moon_vx = -moon_orbital_v * incl_moon.cos();
-    let moon_vz_orbit = -moon_orbital_v * incl_moon.sin();
-    sim.add_body(Body::new_3d(-earth_dist, moon_y, moon_z, moon_vx, -earth_v, moon_vz_orbit, 7.342e22, 3.0));
+    // Luna (Moon): 384,400 km, mass 7.342e22 kg
+    let moon_dist = 3.844e8;
+    let moon_v = (G * earth_mass / moon_dist).sqrt();
+    let moon_y = moon_dist * incl_moon.cos();
+    let moon_z = moon_dist * incl_moon.sin();
+    sim.add_body(Body::new_3d(earth_x, moon_y, moon_z, -moon_v * incl_moon.cos(), earth_vy, -moon_v * incl_moon.sin(), 7.342e22, 3.0));
     
-    // Mars: 1.524 AU, mass 6.417e23 kg, incl 1.85°
+    // ========== MARS SYSTEM ==========
     let mars_dist = 2.279e11;
     let mars_v = (G * sun_mass / mars_dist).sqrt();
-    // Position at (0, -r, 0) -> inclined
-    let y = -mars_dist * incl_mars.cos();
-    let z = -mars_dist * incl_mars.sin();
-    sim.add_body(Body::new_3d(0.0, y, z, mars_v, 0.0, 0.0, 6.417e23, 5.0));
+    let mars_mass = 6.417e23;
+    let mars_y = -mars_dist * incl_mars.cos();
+    let mars_z = -mars_dist * incl_mars.sin();
+    let mars_vx = mars_v;
+    sim.add_body(Body::new_3d(0.0, mars_y, mars_z, mars_vx, 0.0, 0.0, mars_mass, 5.0));
     
-    // Jupiter: 5.203 AU, mass 1.898e27 kg, incl 1.31°
+    // Phobos: 9,376 km, mass 1.0659e16 kg
+    let phobos_dist = 9.376e6;
+    let phobos_v = (G * mars_mass / phobos_dist).sqrt();
+    sim.add_body(Body::new_3d(phobos_dist, mars_y, mars_z, mars_vx, phobos_v, 0.0, 1.0659e16, 1.0));
+    
+    // Deimos: 23,463 km, mass 1.4762e15 kg
+    let deimos_dist = 2.3463e7;
+    let deimos_v = (G * mars_mass / deimos_dist).sqrt();
+    sim.add_body(Body::new_3d(-deimos_dist, mars_y, mars_z, mars_vx, -deimos_v, 0.0, 1.4762e15, 1.0));
+    
+    // ========== JUPITER SYSTEM ==========
     let jupiter_dist = 7.785e11;
     let jupiter_v = (G * sun_mass / jupiter_dist).sqrt();
-    let vy = jupiter_v * incl_jupiter.cos();
-    let vz = jupiter_v * incl_jupiter.sin();
-    sim.add_body(Body::new_3d(jupiter_dist, 0.0, 0.0, 0.0, vy, vz, 1.898e27, 18.0));
+    let jupiter_mass = 1.898e27;
+    let jupiter_x = jupiter_dist;
+    let jupiter_vy = jupiter_v * incl_jupiter.cos();
+    let jupiter_vz = jupiter_v * incl_jupiter.sin();
+    sim.add_body(Body::new_3d(jupiter_x, 0.0, 0.0, 0.0, jupiter_vy, jupiter_vz, jupiter_mass, 18.0));
     
-    // Saturn: 9.537 AU, mass 5.683e26 kg, incl 2.49°
+    // Io: 421,700 km, mass 8.9319e22 kg
+    let io_dist = 4.217e8;
+    let io_v = (G * jupiter_mass / io_dist).sqrt();
+    sim.add_body(Body::new_3d(jupiter_x, io_dist, 0.0, -io_v, jupiter_vy, jupiter_vz, 8.9319e22, 2.5));
+    
+    // Europa: 671,034 km, mass 4.7998e22 kg
+    let europa_dist = 6.71034e8;
+    let europa_v = (G * jupiter_mass / europa_dist).sqrt();
+    sim.add_body(Body::new_3d(jupiter_x, -europa_dist, 0.0, europa_v, jupiter_vy, jupiter_vz, 4.7998e22, 2.2));
+    
+    // Ganymede: 1,070,412 km, mass 1.4819e23 kg (largest moon in solar system)
+    let ganymede_dist = 1.070412e9;
+    let ganymede_v = (G * jupiter_mass / ganymede_dist).sqrt();
+    sim.add_body(Body::new_3d(jupiter_x + ganymede_dist, 0.0, 0.0, 0.0, jupiter_vy + ganymede_v, jupiter_vz, 1.4819e23, 3.0));
+    
+    // Callisto: 1,882,709 km, mass 1.0759e23 kg
+    let callisto_dist = 1.882709e9;
+    let callisto_v = (G * jupiter_mass / callisto_dist).sqrt();
+    sim.add_body(Body::new_3d(jupiter_x - callisto_dist, 0.0, 0.0, 0.0, jupiter_vy - callisto_v, jupiter_vz, 1.0759e23, 2.8));
+    
+    // ========== SATURN SYSTEM ==========
     let saturn_dist = 1.432e12;
     let saturn_v = (G * sun_mass / saturn_dist).sqrt();
-    let y = saturn_dist * incl_saturn.cos();
-    let z = saturn_dist * incl_saturn.sin();
-    sim.add_body(Body::new_3d(0.0, y, z, -saturn_v, 0.0, 0.0, 5.683e26, 15.0));
+    let saturn_mass = 5.683e26;
+    let saturn_y = saturn_dist * incl_saturn.cos();
+    let saturn_z = saturn_dist * incl_saturn.sin();
+    let saturn_vx = -saturn_v;
+    sim.add_body(Body::new_3d(0.0, saturn_y, saturn_z, saturn_vx, 0.0, 0.0, saturn_mass, 15.0));
     
-    // Uranus: 19.19 AU, mass 8.681e25 kg, incl 0.77°
+    // Mimas: 185,539 km, mass 3.75e19 kg
+    let mimas_dist = 1.85539e8;
+    let mimas_v = (G * saturn_mass / mimas_dist).sqrt();
+    sim.add_body(Body::new_3d(mimas_dist, saturn_y, saturn_z, saturn_vx, mimas_v, 0.0, 3.75e19, 1.0));
+    
+    // Enceladus: 237,948 km, mass 1.08e20 kg
+    let enceladus_dist = 2.37948e8;
+    let enceladus_v = (G * saturn_mass / enceladus_dist).sqrt();
+    sim.add_body(Body::new_3d(-enceladus_dist, saturn_y, saturn_z, saturn_vx, -enceladus_v, 0.0, 1.08e20, 1.0));
+    
+    // Tethys: 294,619 km, mass 6.175e20 kg
+    let tethys_dist = 2.94619e8;
+    let tethys_v = (G * saturn_mass / tethys_dist).sqrt();
+    sim.add_body(Body::new_3d(0.0, saturn_y + tethys_dist, saturn_z, saturn_vx - tethys_v, 0.0, 0.0, 6.175e20, 1.2));
+    
+    // Dione: 377,396 km, mass 1.095e21 kg
+    let dione_dist = 3.77396e8;
+    let dione_v = (G * saturn_mass / dione_dist).sqrt();
+    sim.add_body(Body::new_3d(0.0, saturn_y - dione_dist, saturn_z, saturn_vx + dione_v, 0.0, 0.0, 1.095e21, 1.3));
+    
+    // Rhea: 527,108 km, mass 2.3065e21 kg
+    let rhea_dist = 5.27108e8;
+    let rhea_v = (G * saturn_mass / rhea_dist).sqrt();
+    sim.add_body(Body::new_3d(rhea_dist, saturn_y, saturn_z, saturn_vx, rhea_v, 0.0, 2.3065e21, 1.5));
+    
+    // Titan: 1,221,870 km, mass 1.3452e23 kg (largest Saturn moon, has atmosphere)
+    let titan_dist = 1.22187e9;
+    let titan_v = (G * saturn_mass / titan_dist).sqrt();
+    sim.add_body(Body::new_3d(-titan_dist, saturn_y, saturn_z, saturn_vx, -titan_v, 0.0, 1.3452e23, 3.0));
+    
+    // Iapetus: 3,560,820 km, mass 1.8056e21 kg
+    let iapetus_dist = 3.56082e9;
+    let iapetus_v = (G * saturn_mass / iapetus_dist).sqrt();
+    sim.add_body(Body::new_3d(0.0, saturn_y + iapetus_dist, saturn_z, saturn_vx - iapetus_v, 0.0, 0.0, 1.8056e21, 1.5));
+    
+    // ========== URANUS SYSTEM ==========
     let uranus_dist = 2.867e12;
     let uranus_v = (G * sun_mass / uranus_dist).sqrt();
-    let vy = -uranus_v * incl_uranus.cos();
-    let vz = -uranus_v * incl_uranus.sin();
-    sim.add_body(Body::new_3d(-uranus_dist, 0.0, 0.0, 0.0, vy, vz, 8.681e25, 10.0));
+    let uranus_mass = 8.681e25;
+    let uranus_x = -uranus_dist;
+    let uranus_vy = -uranus_v * incl_uranus.cos();
+    let uranus_vz = -uranus_v * incl_uranus.sin();
+    sim.add_body(Body::new_3d(uranus_x, 0.0, 0.0, 0.0, uranus_vy, uranus_vz, uranus_mass, 10.0));
     
-    // Neptune: 30.07 AU, mass 1.024e26 kg, incl 1.77°
+    // Miranda: 129,390 km, mass 6.6e19 kg
+    let miranda_dist = 1.2939e8;
+    let miranda_v = (G * uranus_mass / miranda_dist).sqrt();
+    sim.add_body(Body::new_3d(uranus_x, miranda_dist, 0.0, -miranda_v, uranus_vy, uranus_vz, 6.6e19, 1.0));
+    
+    // Ariel: 190,900 km, mass 1.29e21 kg
+    let ariel_dist = 1.909e8;
+    let ariel_v = (G * uranus_mass / ariel_dist).sqrt();
+    sim.add_body(Body::new_3d(uranus_x, -ariel_dist, 0.0, ariel_v, uranus_vy, uranus_vz, 1.29e21, 1.3));
+    
+    // Umbriel: 266,000 km, mass 1.28e21 kg
+    let umbriel_dist = 2.66e8;
+    let umbriel_v = (G * uranus_mass / umbriel_dist).sqrt();
+    sim.add_body(Body::new_3d(uranus_x + umbriel_dist, 0.0, 0.0, 0.0, uranus_vy + umbriel_v, uranus_vz, 1.28e21, 1.3));
+    
+    // Titania: 436,300 km, mass 3.42e21 kg (largest Uranus moon)
+    let titania_dist = 4.363e8;
+    let titania_v = (G * uranus_mass / titania_dist).sqrt();
+    sim.add_body(Body::new_3d(uranus_x - titania_dist, 0.0, 0.0, 0.0, uranus_vy - titania_v, uranus_vz, 3.42e21, 1.6));
+    
+    // Oberon: 583,500 km, mass 3.08e21 kg
+    let oberon_dist = 5.835e8;
+    let oberon_v = (G * uranus_mass / oberon_dist).sqrt();
+    sim.add_body(Body::new_3d(uranus_x, oberon_dist, 0.0, -oberon_v, uranus_vy, uranus_vz, 3.08e21, 1.5));
+    
+    // ========== NEPTUNE SYSTEM ==========
     let neptune_dist = 4.515e12;
     let neptune_v = (G * sun_mass / neptune_dist).sqrt();
-    let y = -neptune_dist * incl_neptune.cos();
-    let z = -neptune_dist * incl_neptune.sin();
-    sim.add_body(Body::new_3d(0.0, y, z, neptune_v, 0.0, 0.0, 1.024e26, 10.0));
+    let neptune_mass = 1.024e26;
+    let neptune_y = -neptune_dist * incl_neptune.cos();
+    let neptune_z = -neptune_dist * incl_neptune.sin();
+    let neptune_vx = neptune_v;
+    sim.add_body(Body::new_3d(0.0, neptune_y, neptune_z, neptune_vx, 0.0, 0.0, neptune_mass, 10.0));
+    
+    // Triton: 354,759 km, mass 2.14e22 kg (RETROGRADE orbit - only large moon with retrograde)
+    let triton_dist = 3.54759e8;
+    let triton_v = (G * neptune_mass / triton_dist).sqrt();
+    // Retrograde: velocity opposite to normal prograde direction
+    sim.add_body(Body::new_3d(triton_dist, neptune_y, neptune_z, neptune_vx, triton_v, 0.0, 2.14e22, 2.5));
 
     sim
 }
