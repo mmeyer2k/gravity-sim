@@ -145,7 +145,7 @@
 
         <div class="control-group">
             <label>Speed: <span id="time-value">1x</span></label>
-            <input type="range" id="time-scale" min="0.1" max="10" step="0.1" value="1">
+            <input type="range" id="time-scale" min="0.01" max="10" step="0.01" value="1">
         </div>
 
         <div class="control-group">
@@ -833,11 +833,19 @@
                 
                 if (!paused) {
                     // Fixed small dt for numerical stability
-                    // dt = 3600 seconds (1 hour)
+                    // Base dt = 3600 seconds (1 hour)
                     // At 1x speed: ~7 sim days per real second (at 60fps)
                     // At 10x: ~70 sim days per real second
-                    const dt = 3600;
-                    const stepsPerFrame = Math.round(10 * timeScale);
+                    // For ultra-slow (< 0.1x): scale dt instead of using fractional steps
+                    let dt = 3600;
+                    let stepsPerFrame;
+                    if (timeScale < 0.1) {
+                        // At 0.01x: dt = 360s (6 min), 1 step per frame
+                        dt = 3600 * (timeScale / 0.1);
+                        stepsPerFrame = 1;
+                    } else {
+                        stepsPerFrame = Math.round(10 * timeScale);
+                    }
                     
                     // Track body masses before step to detect mergers
                     const prevCount = sim.body_count();
@@ -942,7 +950,11 @@
 
             document.getElementById('time-scale').addEventListener('input', (e) => {
                 timeScale = parseFloat(e.target.value);
-                document.getElementById('time-value').textContent = timeScale + 'x';
+                // Format nicely: avoid 0.10000000001 type floating point display issues
+                const display = timeScale < 0.1 ? timeScale.toFixed(2) : 
+                               timeScale < 1 ? timeScale.toFixed(1) : 
+                               timeScale.toFixed(1).replace(/\.0$/, '');
+                document.getElementById('time-value').textContent = display + 'x';
             });
 
             document.getElementById('gravity-slider').addEventListener('input', (e) => {
@@ -1266,7 +1278,10 @@
             
             const speedSlider = document.getElementById('time-scale');
             timeScale = parseFloat(speedSlider.value);
-            document.getElementById('time-value').textContent = timeScale + 'x';
+            const speedDisplay = timeScale < 0.1 ? timeScale.toFixed(2) : 
+                                timeScale < 1 ? timeScale.toFixed(1) : 
+                                timeScale.toFixed(1).replace(/\.0$/, '');
+            document.getElementById('time-value').textContent = speedDisplay + 'x';
             
             const trailSlider = document.getElementById('trail-slider');
             // Initialize trail length from slider (dispatch event to run the mapping logic)
