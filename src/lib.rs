@@ -452,6 +452,79 @@ impl Simulation {
     }
 }
 
+// Preset: Solar system (planets only, no moons)
+#[wasm_bindgen]
+pub fn create_solar_system_no_moons() -> Simulation {
+    let mut sim = Simulation::new();
+    
+    let incl_mercury = 7.00_f64.to_radians();
+    let incl_venus = 3.39_f64.to_radians();
+    let incl_mars = 1.85_f64.to_radians();
+    let incl_jupiter = 1.31_f64.to_radians();
+    let incl_saturn = 2.49_f64.to_radians();
+    let incl_uranus = 0.77_f64.to_radians();
+    let incl_neptune = 1.77_f64.to_radians();
+    
+    let sun_mass = 1.989e30;
+    sim.add_body(Body::new(0.0, 0.0, 0.0, 0.0, sun_mass, 30.0));
+    
+    // Mercury
+    let mercury_dist = 5.79e10;
+    let mercury_v = (G * sun_mass / mercury_dist).sqrt();
+    let vy = mercury_v * incl_mercury.cos();
+    let vz = mercury_v * incl_mercury.sin();
+    sim.add_body(Body::new_3d(mercury_dist, 0.0, 0.0, 0.0, vy, vz, 3.301e23, 4.0));
+    
+    // Venus
+    let venus_dist = 1.082e11;
+    let venus_v = (G * sun_mass / venus_dist).sqrt();
+    let y = venus_dist * incl_venus.cos();
+    let z = venus_dist * incl_venus.sin();
+    sim.add_body(Body::new_3d(0.0, y, z, -venus_v, 0.0, 0.0, 4.867e24, 7.0));
+    
+    // Earth
+    let earth_dist = 1.496e11;
+    let earth_v = (G * sun_mass / earth_dist).sqrt();
+    sim.add_body(Body::new_3d(-earth_dist, 0.0, 0.0, 0.0, -earth_v, 0.0, 5.972e24, 8.0));
+    
+    // Mars
+    let mars_dist = 2.279e11;
+    let mars_v = (G * sun_mass / mars_dist).sqrt();
+    let mars_y = -mars_dist * incl_mars.cos();
+    let mars_z = -mars_dist * incl_mars.sin();
+    sim.add_body(Body::new_3d(0.0, mars_y, mars_z, mars_v, 0.0, 0.0, 6.417e23, 5.0));
+    
+    // Jupiter
+    let jupiter_dist = 7.785e11;
+    let jupiter_v = (G * sun_mass / jupiter_dist).sqrt();
+    let jupiter_vy = jupiter_v * incl_jupiter.cos();
+    let jupiter_vz = jupiter_v * incl_jupiter.sin();
+    sim.add_body(Body::new_3d(jupiter_dist, 0.0, 0.0, 0.0, jupiter_vy, jupiter_vz, 1.898e27, 18.0));
+    
+    // Saturn
+    let saturn_dist = 1.432e12;
+    let saturn_v = (G * sun_mass / saturn_dist).sqrt();
+    let saturn_y = saturn_dist * incl_saturn.cos();
+    let saturn_z = saturn_dist * incl_saturn.sin();
+    sim.add_body(Body::new_3d(0.0, saturn_y, saturn_z, -saturn_v, 0.0, 0.0, 5.683e26, 15.0));
+    
+    // Uranus
+    let uranus_dist = 2.867e12;
+    let uranus_v = (G * sun_mass / uranus_dist).sqrt();
+    let uranus_vy = -uranus_v * incl_uranus.cos();
+    let uranus_vz = -uranus_v * incl_uranus.sin();
+    sim.add_body(Body::new_3d(-uranus_dist, 0.0, 0.0, 0.0, uranus_vy, uranus_vz, 8.681e25, 10.0));
+    
+    // Neptune
+    let neptune_dist = 4.515e12;
+    let neptune_v = (G * sun_mass / neptune_dist).sqrt();
+    let neptune_y = -neptune_dist * incl_neptune.cos();
+    let neptune_z = -neptune_dist * incl_neptune.sin();
+    sim.add_body(Body::new_3d(0.0, neptune_y, neptune_z, neptune_v, 0.0, 0.0, 1.024e26, 10.0));
+
+    sim
+}
+
 // Preset: Solar system with all major moons
 #[wasm_bindgen]
 pub fn create_solar_system() -> Simulation {
