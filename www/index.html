@@ -130,8 +130,7 @@
             <label>Preset Scenarios</label>
             <div style="display: flex; gap: 8px;">
                 <select id="preset" style="flex: 1;">
-                    <option value="solar">Solar System (with Moons)</option>
-                    <option value="solar-no-moons">Solar System (no Moons)</option>
+                    <option value="solar">Solar System</option>
                     <option value="binary">Binary Star</option>
                     <option value="neutron">Neutron Star Merger</option>
                     <option value="figure8">Figure-8 (3-body)</option>
@@ -265,7 +264,7 @@
     <script type="module">
         import init, { 
             Simulation, Body,
-            create_solar_system, create_solar_system_no_moons, create_binary_star, create_neutron_merger,
+            create_solar_system, create_binary_star, create_neutron_merger,
             create_figure_eight, create_chaos, create_lagrange, create_galaxy_collision
         } from './pkg/gravity_sim.js';
 
@@ -396,18 +395,8 @@
             function initBodyMeta(preset = null) {
                 bodyMeta = [];
                 // Special colors for solar system
-                if (preset === 'solar' || preset === 'solar-no-moons') {
-                    const solarColors = preset === 'solar-no-moons' ? [
-                        '#ffdd44',  // Sun (yellow)
-                        '#b0b0b0',  // Mercury (gray)
-                        '#e6c87a',  // Venus (pale yellow)
-                        '#4488ff',  // Earth (blue)
-                        '#dd6644',  // Mars (red-orange)
-                        '#ddaa77',  // Jupiter (tan/orange)
-                        '#eecc88',  // Saturn (pale gold)
-                        '#88dddd',  // Uranus (cyan)
-                        '#5588ff',  // Neptune (blue)
-                    ] : [
+                if (preset === 'solar') {
+                    const solarColors = [
                         '#ffdd44',  // Sun (yellow)
                         '#b0b0b0',  // Mercury (gray)
                         '#e6c87a',  // Venus (pale yellow)
@@ -456,7 +445,6 @@
             function loadPreset(name) {
                 switch(name) {
                     case 'solar': sim = create_solar_system(); break;
-                    case 'solar-no-moons': sim = create_solar_system_no_moons(); break;
                     case 'binary': sim = create_binary_star(); break;
                     case 'neutron': sim = create_neutron_merger(); break;
                     case 'figure8': sim = create_figure_eight(); break;
