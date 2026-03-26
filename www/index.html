@@ -137,6 +137,7 @@
                     <option value="lagrange">Lagrange Points</option>
                     <option value="galaxy">Galaxy Collision</option>
                     <option value="chaos">Chaotic System</option>
+                    <option value="blackhole">Black Hole</option>
                     <option value="empty">Empty Space</option>
                 </select>
                 <button id="reset-btn" style="width: auto; padding: 8px 12px;">🔄</button>
@@ -262,10 +263,11 @@
     <div id="follow-indicator" style="display: none; position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(20, 20, 30, 0.9); padding: 10px 20px; border-radius: 8px; border: 1px solid rgba(100, 255, 100, 0.4); font-size: 0.9em; color: #8f8;">Following: --  <span style="color: #888; font-size: 0.8em;">(Esc to stop)</span></div>
 
     <script type="module">
-        import init, { 
+        import init, {
             Simulation, Body,
             create_solar_system, create_binary_star, create_neutron_merger,
-            create_figure_eight, create_chaos, create_lagrange, create_galaxy_collision
+            create_figure_eight, create_chaos, create_lagrange, create_galaxy_collision,
+            create_black_hole_preset
         } from './pkg/gravity_sim.js';
 
         async function main() {
@@ -451,6 +453,7 @@
                     case 'lagrange': sim = create_lagrange(); break;
                     case 'galaxy': sim = create_galaxy_collision(); break;
                     case 'chaos': sim = create_chaos(); break;
+                    case 'blackhole': sim = create_black_hole_preset(); break;
                     case 'empty': sim = new Simulation(); break;
                 }
                 initBodyMeta(name);
@@ -460,7 +463,7 @@
                 // Reset view (position, zoom, and 3D rotation)
                 viewX = canvas.width / 2;
                 viewY = canvas.height / 2;
-                zoom = 1.5e-9;
+                zoom = name === 'blackhole' ? 8e-9 : 1.5e-9;
                 camRotX = 0;
                 camRotZ = 0;
                 // Apply current settings
@@ -574,11 +577,32 @@
                     const screen = worldToScreen(x, y, z);
                     const color = bodyMeta[i]?.color || '#ffffff';
                     
-                    ctx.beginPath();
-                    ctx.arc(screen.x, screen.y, r, 0, Math.PI * 2);
-                    ctx.fillStyle = color;
-                    ctx.fill();
-                    
+                    const mass = sim.get_body_mass(i);
+                    if (mass > 1e31) {
+                        // Black hole: draw black filled circle
+                        ctx.beginPath();
+                        ctx.arc(screen.x, screen.y, r, 0, Math.PI * 2);
+                        ctx.fillStyle = '#000000';
+                        ctx.fill();
+
+                        // Draw glowing accretion ring using radialGradient scaled to physical_radius
+                        const glowR = Math.max(r * 2.5, physicalR * zoom * 2.5);
+                        const grad = ctx.createRadialGradient(screen.x, screen.y, r * 0.8, screen.x, screen.y, glowR);
+                        grad.addColorStop(0, 'rgba(255, 140, 0, 0)');
+                        grad.addColorStop(0.3, 'rgba(255, 140, 0, 0.7)');
+                        grad.addColorStop(0.6, 'rgba(255, 80, 0, 0.3)');
+                        grad.addColorStop(1, 'rgba(255, 50, 0, 0)');
+                        ctx.beginPath();
+                        ctx.arc(screen.x, screen.y, glowR, 0, Math.PI * 2);
+                        ctx.fillStyle = grad;
+                        ctx.fill();
+                    } else {
+                        ctx.beginPath();
+                        ctx.arc(screen.x, screen.y, r, 0, Math.PI * 2);
+                        ctx.fillStyle = color;
+                        ctx.fill();
+                    }
+
                     // Draw follow indicator ring
                     if (i === followBodyIndex) {
                         ctx.beginPath();

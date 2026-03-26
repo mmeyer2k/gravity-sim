@@ -214,6 +214,9 @@ impl Simulation {
         if self.collisions_enabled {
             self.handle_collisions();
         }
+
+        // Handle event horizons (black hole accretion)
+        self.apply_event_horizons();
     }
     
     /// Compute gravitational accelerations for all bodies
@@ -449,6 +452,59 @@ impl Simulation {
         let total_mass: f64 = self.bodies.iter().map(|b| b.mass).sum();
         if total_mass == 0.0 { return 0.0; }
         self.bodies.iter().map(|b| b.z * b.mass).sum::<f64>() / total_mass
+    }
+
+    /// Apply event horizon accretion: black holes (mass > 1e31) consume any body
+    /// within their physical_radius (Schwarzschild radius).
+    fn apply_event_horizons(&mut self) {
+        let mut i = 0;
+        while i < self.bodies.len() {
+            if self.bodies[i].mass <= 1e31 {
+                i += 1;
+                continue;
+            }
+            // This is a black hole - check all other bodies
+            let mut j = 0;
+            while j < self.bodies.len() {
+                if j == i {
+                    j += 1;
+                    continue;
+                }
+                let dx = self.bodies[j].x - self.bodies[i].x;
+                let dy = self.bodies[j].y - self.bodies[i].y;
+                let dz = self.bodies[j].z - self.bodies[i].z;
+                let dist = (dx * dx + dy * dy + dz * dz).sqrt();
+
+                if dist < self.bodies[i].physical_radius {
+                    // Consume body j: add its mass to the black hole
+                    let consumed_mass = self.bodies[j].mass;
+                    let bh_mass = self.bodies[i].mass;
+                    let total_mass = bh_mass + consumed_mass;
+
+                    // Momentum conservation for velocity
+                    let new_vx = (bh_mass * self.bodies[i].vx + consumed_mass * self.bodies[j].vx) / total_mass;
+                    let new_vy = (bh_mass * self.bodies[i].vy + consumed_mass * self.bodies[j].vy) / total_mass;
+                    let new_vz = (bh_mass * self.bodies[i].vz + consumed_mass * self.bodies[j].vz) / total_mass;
+
+                    self.bodies[i].mass = total_mass;
+                    self.bodies[i].vx = new_vx;
+                    self.bodies[i].vy = new_vy;
+                    self.bodies[i].vz = new_vz;
+                    // Update Schwarzschild radius
+                    self.bodies[i].physical_radius = 2.0 * G * total_mass / (C * C);
+
+                    self.bodies.remove(j);
+                    // Adjust i if needed
+                    if j < i {
+                        i -= 1;
+                    }
+                    // Don't increment j, re-check same index
+                } else {
+                    j += 1;
+                }
+            }
+            i += 1;
+        }
     }
 }
 
@@ -886,6 +942,53 @@ pub fn create_galaxy_collision() -> Simulation {
         
         sim.add_body(Body::new_3d(x, y, z, vx, vy, vz, star_mass, 3.0));
     }
-    
+
+    sim
+}
+
+// Preset: Black Hole with orbiting test bodies
+#[wasm_bindgen]
+pub fn create_black_hole_preset() -> Simulation {
+    let mut sim = Simulation::new();
+
+    let bh_mass = 1e32_f64;
+    // Schwarzschild radius: r_s = 2*G*M/c^2
+    let bh_radius = 2.0 * G * bh_mass / (C * C);  // ~148311 m
+
+    // Central black hole at origin with explicit Schwarzschild radius
+    let bh = Body {
+        x: 0.0, y: 0.0, z: 0.0,
+        vx: 0.0, vy: 0.0, vz: 0.0,
+        mass: bh_mass,
+        radius: 12.0,
+        physical_radius: bh_radius,
+    };
+    sim.add_body(bh);
+
+    // Body 1: r=8e9, v_circ * 0.97 (slightly low — will spiral in slowly)
+    let r1 = 8e9_f64;
+    let v1 = (G * bh_mass / r1).sqrt() * 0.97;
+    sim.add_body(Body::new_3d(r1, 0.0, 0.0, 0.0, v1, 0.0, 1e20, 6.0));
+
+    // Body 2: r=1.5e10, v_circ * 1.02
+    let r2 = 1.5e10_f64;
+    let v2 = (G * bh_mass / r2).sqrt() * 1.02;
+    sim.add_body(Body::new_3d(0.0, r2, 0.0, -v2, 0.0, 0.0, 1e20, 6.0));
+
+    // Body 3: r=2.5e10, v_circ * 0.95 (will spiral in faster)
+    let r3 = 2.5e10_f64;
+    let v3 = (G * bh_mass / r3).sqrt() * 0.95;
+    sim.add_body(Body::new_3d(-r3, 0.0, 0.0, 0.0, -v3, 0.0, 1e20, 6.0));
+
+    // Body 4: r=4e10, v_circ * 1.0 (stable)
+    let r4 = 4e10_f64;
+    let v4 = (G * bh_mass / r4).sqrt() * 1.0;
+    sim.add_body(Body::new_3d(0.0, -r4, 0.0, v4, 0.0, 0.0, 1e20, 6.0));
+
+    // Body 5: r=2e10, perpendicular velocity * 0.3 (very eccentric, gets consumed quickly)
+    let r5 = 2e10_f64;
+    let v5_perp = (G * bh_mass / r5).sqrt() * 0.3;
+    sim.add_body(Body::new_3d(r5, r5, 0.0, -v5_perp, v5_perp, 0.0, 1e20, 6.0));
+
     sim
 }
