@@ -1051,13 +1051,13 @@
                     // Check if bodies merged (count decreased) - create scaled flash
                     const newCount = sim.body_count();
                     if (newCount < prevCount) {
-                        const mergedCount = prevCount - newCount;
                         for (let i = 0; i < newCount; i++) {
                             const newMass = sim.get_body_mass(i);
                             const oldMass = prevBodies[i]?.mass || 0;
                             if (newMass > oldMass * 1.01) {
                                 // Estimate collision energy using reduced mass and relative velocity
                                 const absorbedMass = newMass - oldMass;
+                                if (absorbedMass < 1) continue;
                                 const reducedMass = (oldMass * absorbedMass) / (oldMass + absorbedMass);
 
                                 // Estimate relative velocity from the velocity change
