@@ -397,7 +397,7 @@
             // Compute screen radius for a body: physical radius scaled to screen,
             // clamped to min/max pixel bounds. Ensures bodies are visible but
             // never so large they overlap orbital partners.
-            function computeScreenRadius(physicalRadius, mass) {
+            function computeScreenRadius(physicalRadius) {
                 const physicalScreenR = physicalRadius * zoom;
                 const maxScreenR = Math.min(canvas.width, canvas.height) * 0.15;
                 return Math.max(minPixelRadius, Math.min(physicalScreenR, maxScreenR));
@@ -703,7 +703,7 @@
                     const z = sim.get_body_z(i);
                     const physicalR = sim.get_body_physical_radius(i);
                     const mass = sim.get_body_mass(i);
-                    const r = computeScreenRadius(physicalR, mass);
+                    const r = computeScreenRadius(physicalR);
                     const screen = worldToScreen(x, y, z);
                     const color = bodyMeta[i]?.color || '#ffffff';
 
@@ -842,7 +842,7 @@
                     ctx.setLineDash([]);
                     
                     const preset = massPresets[selectedMassIndex];
-                    const dragR = computeScreenRadius(0, preset.mass);
+                    const dragR = computeScreenRadius(0);
                     ctx.beginPath();
                     ctx.arc(dragStart.x, dragStart.y, dragR, 0, Math.PI * 2);
                     ctx.fillStyle = selectedColor + '88';
@@ -1075,7 +1075,7 @@
                                 const energyFrac = Math.min(logE / 26, 1); // 0 to 1
 
                                 const screen = worldToScreen(sim.get_body_x(i), sim.get_body_y(i), sim.get_body_z(i));
-                                const bodyR = computeScreenRadius(sim.get_body_physical_radius(i), newMass);
+                                const bodyR = computeScreenRadius(sim.get_body_physical_radius(i));
 
                                 // Flash radius: 1.5x to 6x body radius
                                 const flashRadius = bodyR * (1.5 + 4.5 * energyFrac);
@@ -1323,8 +1323,7 @@
                         const bz = sim.get_body_z(i);
                         const screen = worldToScreen(bx, by, bz);
                         const physicalR = sim.get_body_physical_radius(i);
-                        const mass = sim.get_body_mass(i);
-                        const r = computeScreenRadius(physicalR, mass);
+                        const r = computeScreenRadius(physicalR);
                         const dx = e.clientX - screen.x;
                         const dy = e.clientY - screen.y;
                         const dist = Math.sqrt(dx*dx + dy*dy);
@@ -1466,8 +1465,7 @@
                     const bz = sim.get_body_z(i);
                     const screen = worldToScreen(bx, by, bz);
                     const physicalR = sim.get_body_physical_radius(i);
-                    const mass = sim.get_body_mass(i);
-                    const r = computeScreenRadius(physicalR, mass);
+                    const r = computeScreenRadius(physicalR);
                     const dx = x - screen.x;
                     const dy = y - screen.y;
                     const dist = Math.sqrt(dx*dx + dy*dy);
