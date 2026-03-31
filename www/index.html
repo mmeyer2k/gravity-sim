@@ -187,8 +187,8 @@
         </div>
 
         <div class="control-group">
-            <label>Body Size: <span id="size-value">Exaggerated</span></label>
-            <input type="range" id="size-slider" min="0" max="100" step="1" value="100">
+            <label>Min Body Size: <span id="size-value">4 px</span></label>
+            <input type="range" id="size-slider" min="2" max="10" step="1" value="4">
         </div>
 
         <div class="stats">
@@ -281,7 +281,7 @@
             let paused = false;
             let showVectors = false;
             let timeScale = 1.0;
-            let sizeScale = 1.0;  // 0 = realistic, 1 = exaggerated
+            let minPixelRadius = 4;  // Minimum screen radius in pixels (controlled by slider)
             
             // View transform
             let viewX = 0;
@@ -392,6 +392,15 @@
                 const vy = vScreenX * sinZ + vyUntilted * cosZ;
                 
                 return { vx, vy, vz };
+            }
+
+            // Compute screen radius for a body: physical radius scaled to screen,
+            // clamped to min/max pixel bounds. Ensures bodies are visible but
+            // never so large they overlap orbital partners.
+            function computeScreenRadius(physicalRadius, mass) {
+                const physicalScreenR = physicalRadius * zoom;
+                const maxScreenR = Math.min(canvas.width, canvas.height) * 0.15;
+                return Math.max(minPixelRadius, Math.min(physicalScreenR, maxScreenR));
             }
 
             function initBodyMeta(preset = null) {
@@ -568,25 +577,19 @@
                     const x = sim.get_body_x(i);
                     const y = sim.get_body_y(i);
                     const z = sim.get_body_z(i);
-                    const exaggeratedR = sim.get_body_radius(i);
                     const physicalR = sim.get_body_physical_radius(i);
-                    // Realistic screen radius (physical size at current zoom, min 2px)
-                    const realisticR = Math.max(2, physicalR * zoom);
-                    // Interpolate between realistic and exaggerated based on sizeScale
-                    const r = realisticR + (exaggeratedR - realisticR) * sizeScale;
+                    const mass = sim.get_body_mass(i);
+                    const r = computeScreenRadius(physicalR, mass);
                     const screen = worldToScreen(x, y, z);
                     const color = bodyMeta[i]?.color || '#ffffff';
-                    
-                    const mass = sim.get_body_mass(i);
+
                     if (mass > 1e31) {
-                        // Black hole: draw black filled circle
                         ctx.beginPath();
                         ctx.arc(screen.x, screen.y, r, 0, Math.PI * 2);
                         ctx.fillStyle = '#000000';
                         ctx.fill();
 
-                        // Draw glowing accretion ring using radialGradient scaled to physical_radius
-                        const glowR = Math.max(r * 2.5, physicalR * zoom * 2.5);
+                        const glowR = r * 2.5;
                         const grad = ctx.createRadialGradient(screen.x, screen.y, r * 0.8, screen.x, screen.y, glowR);
                         grad.addColorStop(0, 'rgba(255, 140, 0, 0)');
                         grad.addColorStop(0.3, 'rgba(255, 140, 0, 0.7)');
@@ -705,8 +708,9 @@
                     ctx.setLineDash([]);
                     
                     const preset = massPresets[selectedMassIndex];
+                    const dragR = computeScreenRadius(0, preset.mass);
                     ctx.beginPath();
-                    ctx.arc(dragStart.x, dragStart.y, preset.radius, 0, Math.PI * 2);
+                    ctx.arc(dragStart.x, dragStart.y, dragR, 0, Math.PI * 2);
                     ctx.fillStyle = selectedColor + '88';
                     ctx.fill();
                 }
@@ -988,9 +992,8 @@
             });
 
             document.getElementById('size-slider').addEventListener('input', (e) => {
-                sizeScale = parseFloat(e.target.value) / 100;
-                const label = sizeScale < 0.33 ? 'Realistic' : sizeScale < 0.66 ? 'Mixed' : 'Exaggerated';
-                document.getElementById('size-value').textContent = label;
+                minPixelRadius = parseInt(e.target.value);
+                document.getElementById('size-value').textContent = minPixelRadius + ' px';
             });
 
             document.getElementById('mass-slider').addEventListener('input', (e) => {
@@ -1116,11 +1119,13 @@
                         const by = sim.get_body_y(i);
                         const bz = sim.get_body_z(i);
                         const screen = worldToScreen(bx, by, bz);
-                        const r = sim.get_body_radius(i);
+                        const physicalR = sim.get_body_physical_radius(i);
+                        const mass = sim.get_body_mass(i);
+                        const r = computeScreenRadius(physicalR, mass);
                         const dx = e.clientX - screen.x;
                         const dy = e.clientY - screen.y;
                         const dist = Math.sqrt(dx*dx + dy*dy);
-                        
+
                         if (dist < r + 10) { // 10px margin
                             const mass = sim.get_body_mass(i);
                             const vx = sim.get_body_vx(i);
@@ -1257,11 +1262,13 @@
                     const by = sim.get_body_y(i);
                     const bz = sim.get_body_z(i);
                     const screen = worldToScreen(bx, by, bz);
-                    const r = sim.get_body_radius(i);
+                    const physicalR = sim.get_body_physical_radius(i);
+                    const mass = sim.get_body_mass(i);
+                    const r = computeScreenRadius(physicalR, mass);
                     const dx = x - screen.x;
                     const dy = y - screen.y;
                     const dist = Math.sqrt(dx*dx + dy*dy);
-                    
+
                     if (dist < r + 15) {  // 15px margin for easier selection
                         // Toggle: if already following this body, unfollow
                         if (followBodyIndex === i) {
