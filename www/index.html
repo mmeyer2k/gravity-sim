@@ -403,6 +403,124 @@
                 return Math.max(minPixelRadius, Math.min(physicalScreenR, maxScreenR));
             }
 
+            // Compute predicted Keplerian orbit points for a two-body approximation.
+            // Returns array of {x, y, z} world-space points, or empty if no dominant body.
+            function computeOrbitPreview(posX, posY, velX, velY, velZ, newMass) {
+                const G = 6.674e-11;
+
+                // Find the most gravitationally influential body
+                let bestInfluence = 0;
+                let primaryIdx = -1;
+                for (let i = 0; i < sim.body_count(); i++) {
+                    const bx = sim.get_body_x(i);
+                    const by = sim.get_body_y(i);
+                    const bm = sim.get_body_mass(i);
+                    const dx = posX - bx;
+                    const dy = posY - by;
+                    const r2 = dx * dx + dy * dy;
+                    if (r2 < 1) continue;
+                    const influence = G * bm / r2;
+                    if (influence > bestInfluence) {
+                        bestInfluence = influence;
+                        primaryIdx = i;
+                    }
+                }
+
+                if (primaryIdx < 0) return [];
+
+                const px = sim.get_body_x(primaryIdx);
+                const py = sim.get_body_y(primaryIdx);
+                const pz = sim.get_body_z(primaryIdx);
+                const pvx = sim.get_body_vx(primaryIdx);
+                const pvy = sim.get_body_vy(primaryIdx);
+                const pvz = sim.get_body_vz(primaryIdx);
+                const M = sim.get_body_mass(primaryIdx);
+                const mu = G * (M + newMass);
+
+                // Relative position and velocity
+                const rx = posX - px;
+                const ry = posY - py;
+                const rz = 0 - pz;
+                const rvx = velX - pvx;
+                const rvy = velY - pvy;
+                const rvz = velZ - pvz;
+
+                const r = Math.sqrt(rx * rx + ry * ry + rz * rz);
+                const v2 = rvx * rvx + rvy * rvy + rvz * rvz;
+
+                if (r < 1) return [];
+
+                // Specific orbital energy
+                const energy = v2 / 2 - mu / r;
+
+                // Specific angular momentum vector (h = r x v)
+                const hx = ry * rvz - rz * rvy;
+                const hy = rz * rvx - rx * rvz;
+                const hz = rx * rvy - ry * rvx;
+                const h = Math.sqrt(hx * hx + hy * hy + hz * hz);
+
+                if (h < 1e-10) return []; // Radial trajectory, skip
+
+                // Eccentricity vector: e = (v x h) / mu - r_hat
+                // v x h
+                const vxh_x = rvy * hz - rvz * hy;
+                const vxh_y = rvz * hx - rvx * hz;
+                const vxh_z = rvx * hy - rvy * hx;
+
+                const ex = vxh_x / mu - rx / r;
+                const ey = vxh_y / mu - ry / r;
+                const ez = vxh_z / mu - rz / r;
+                const e = Math.sqrt(ex * ex + ey * ey + ez * ez);
+
+                // Semi-latus rectum
+                const p = h * h / mu;
+
+                // Orbit orientation: angle of periapsis in the orbital plane
+                // For 2D-ish orbits, use atan2 of eccentricity vector
+                const omega = Math.atan2(ey, ex);
+
+                // Generate points along the orbit using the conic equation: r = p / (1 + e*cos(theta))
+                const points = [];
+                const numPts = 120;
+
+                // Determine range of true anomaly to draw
+                let thetaMin, thetaMax;
+                if (e < 1.0) {
+                    // Ellipse: draw full orbit
+                    thetaMin = 0;
+                    thetaMax = 2 * Math.PI;
+                } else {
+                    // Hyperbola: draw from -maxTheta to +maxTheta
+                    // Asymptote at cos(theta) = -1/e
+                    const maxTheta = Math.acos(-1 / Math.min(e, 100)) - 0.05;
+                    thetaMin = -maxTheta;
+                    thetaMax = maxTheta;
+                }
+
+                for (let i = 0; i <= numPts; i++) {
+                    const theta = thetaMin + (thetaMax - thetaMin) * (i / numPts);
+                    const denom = 1 + e * Math.cos(theta);
+                    if (denom <= 0.01) continue; // Skip near-asymptote points
+
+                    const orbitR = p / denom;
+
+                    // Cap very large orbits to avoid drawing off-screen noise
+                    if (orbitR > r * 200) continue;
+
+                    // Convert from orbital coordinates to world coordinates
+                    // The orbit lies in the plane defined by angular momentum,
+                    // but for simplicity we project into the XY-ish plane using omega
+                    const angle = theta + omega;
+                    const worldX = px + orbitR * Math.cos(angle);
+                    const worldY = py + orbitR * Math.sin(angle);
+                    const worldZ = pz; // Approximate: keep in primary's Z plane
+
+                    points.push({ x: worldX, y: worldY, z: worldZ });
+                }
+
+                return points;
+            }
+
             function initBodyMeta(preset = null) {
                 bodyMeta = [];
                 // Special colors for solar system
@@ -719,6 +837,29 @@
                     ctx.arc(dragStart.x, dragStart.y, dragR, 0, Math.PI * 2);
                     ctx.fillStyle = selectedColor + '88';
                     ctx.fill();
+
+                    // Draw orbit preview
+                    const worldDrag = screenToWorld(dragStart.x, dragStart.y);
+                    const dragDx = dragStart.current.x - dragStart.x;
+                    const dragDy = dragStart.current.y - dragStart.y;
+                    const vScale = 150;
+                    const worldVel = screenVelocityToWorld(dragDx * vScale, dragDy * vScale);
+                    const orbitPts = computeOrbitPreview(worldDrag.x, worldDrag.y, worldVel.vx, worldVel.vy, worldVel.vz, preset.mass);
+
+                    if (orbitPts.length > 1) {
+                        ctx.beginPath();
+                        const first = worldToScreen(orbitPts[0].x, orbitPts[0].y, orbitPts[0].z);
+                        ctx.moveTo(first.x, first.y);
+                        for (let i = 1; i < orbitPts.length; i++) {
+                            const pt = worldToScreen(orbitPts[i].x, orbitPts[i].y, orbitPts[i].z);
+                            ctx.lineTo(pt.x, pt.y);
+                        }
+                        ctx.strokeStyle = selectedColor + '80';
+                        ctx.lineWidth = 1.5;
+                        ctx.setLineDash([6, 4]);
+                        ctx.stroke();
+                        ctx.setLineDash([]);
+                    }
                 }
 
                 // Update stats
