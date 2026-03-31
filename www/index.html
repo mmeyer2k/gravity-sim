@@ -804,19 +804,29 @@
 
                 // Draw collision flashes
                 for (const flash of collisionFlashes) {
-                    const gradient = ctx.createRadialGradient(
-                        flash.x, flash.y, 0,
-                        flash.x, flash.y, flash.radius
-                    );
-                    gradient.addColorStop(0, `rgba(255, 255, 255, ${flash.alpha})`);
-                    gradient.addColorStop(0.3, `rgba(255, 200, 100, ${flash.alpha * 0.8})`);
-                    gradient.addColorStop(0.6, `rgba(255, 100, 50, ${flash.alpha * 0.4})`);
-                    gradient.addColorStop(1, `rgba(255, 50, 0, 0)`);
-                    
-                    ctx.beginPath();
-                    ctx.arc(flash.x, flash.y, flash.radius, 0, Math.PI * 2);
-                    ctx.fillStyle = gradient;
-                    ctx.fill();
+                    if (flash.isRing) {
+                        // Expanding ring effect
+                        ctx.beginPath();
+                        ctx.arc(flash.x, flash.y, flash.radius, 0, Math.PI * 2);
+                        ctx.strokeStyle = `rgba(170, 221, 255, ${flash.alpha})`;
+                        ctx.lineWidth = flash.ringWidth || 3;
+                        ctx.stroke();
+                    } else {
+                        // Radial flash with bright white core
+                        const gradient = ctx.createRadialGradient(
+                            flash.x, flash.y, 0,
+                            flash.x, flash.y, flash.radius
+                        );
+                        gradient.addColorStop(0, `rgba(255, 255, 255, ${flash.alpha})`);
+                        gradient.addColorStop(0.3, `rgba(255, 220, 150, ${flash.alpha * 0.8})`);
+                        gradient.addColorStop(0.6, `rgba(255, 100, 50, ${flash.alpha * 0.4})`);
+                        gradient.addColorStop(1, `rgba(255, 50, 0, 0)`);
+
+                        ctx.beginPath();
+                        ctx.arc(flash.x, flash.y, flash.radius, 0, Math.PI * 2);
+                        ctx.fillStyle = gradient;
+                        ctx.fill();
+                    }
                 }
 
                 // Draw drag indicator
@@ -1022,35 +1032,80 @@
                         stepsPerFrame = Math.round(10 * timeScale);
                     }
                     
-                    // Track body masses before step to detect mergers
+                    // Track body states before step to detect mergers
                     const prevCount = sim.body_count();
-                    const prevMasses = [];
+                    const prevBodies = [];
                     for (let i = 0; i < prevCount; i++) {
-                        prevMasses.push(sim.get_body_mass(i));
+                        prevBodies.push({
+                            mass: sim.get_body_mass(i),
+                            vx: sim.get_body_vx(i),
+                            vy: sim.get_body_vy(i),
+                            vz: sim.get_body_vz(i)
+                        });
                     }
                     
                     for (let i = 0; i < stepsPerFrame; i++) {
                         sim.step(dt);
                     }
                     
-                    // Check if bodies merged (count decreased) - create flash at merged body
+                    // Check if bodies merged (count decreased) - create scaled flash
                     const newCount = sim.body_count();
                     if (newCount < prevCount) {
-                        // Find which body gained mass (the one that absorbed another)
+                        const mergedCount = prevCount - newCount;
                         for (let i = 0; i < newCount; i++) {
                             const newMass = sim.get_body_mass(i);
-                            const oldMass = prevMasses[i] || 0;
-                            // If mass increased significantly, this body absorbed another
+                            const oldMass = prevBodies[i]?.mass || 0;
                             if (newMass > oldMass * 1.01) {
+                                // Estimate collision energy using reduced mass and relative velocity
+                                const absorbedMass = newMass - oldMass;
+                                const reducedMass = (oldMass * absorbedMass) / (oldMass + absorbedMass);
+
+                                // Estimate relative velocity from the velocity change
+                                const dvx = sim.get_body_vx(i) - (prevBodies[i]?.vx || 0);
+                                const dvy = sim.get_body_vy(i) - (prevBodies[i]?.vy || 0);
+                                const dvz = sim.get_body_vz(i) - (prevBodies[i]?.vz || 0);
+                                const dv = Math.sqrt(dvx*dvx + dvy*dvy + dvz*dvz);
+                                // Scale up: the actual relative velocity was larger than the delta-v
+                                const vRel = dv * (oldMass + absorbedMass) / absorbedMass;
+                                const energy = 0.5 * reducedMass * vRel * vRel;
+
+                                // Map energy to visual scale (log scale, energies span many magnitudes)
+                                // Asteroid collision ~1e20 J, planet ~1e30 J, star ~1e44 J
+                                const logE = Math.max(0, Math.log10(energy + 1) - 18); // 0 for tiny, ~26 for star-star
+                                const energyFrac = Math.min(logE / 26, 1); // 0 to 1
+
                                 const screen = worldToScreen(sim.get_body_x(i), sim.get_body_y(i), sim.get_body_z(i));
+                                const bodyR = computeScreenRadius(sim.get_body_physical_radius(i), newMass);
+
+                                // Flash radius: 1.5x to 6x body radius
+                                const flashRadius = bodyR * (1.5 + 4.5 * energyFrac);
+                                // Duration controlled by decay rate: smaller = slower fade
+                                const decayRate = 0.06 - 0.04 * energyFrac; // 0.06 (fast) to 0.02 (slow)
+
                                 collisionFlashes.push({
                                     x: screen.x,
                                     y: screen.y,
-                                    radius: 20,
-                                    maxRadius: 80,
+                                    radius: flashRadius * 0.3,
+                                    maxRadius: flashRadius,
                                     alpha: 1.0,
+                                    decayRate: decayRate,
                                     color: bodyMeta[i]?.color || '#ffffff'
                                 });
+
+                                // Expanding ring for very high-energy collisions (E > ~1e40 J)
+                                if (energy > 1e40) {
+                                    collisionFlashes.push({
+                                        x: screen.x,
+                                        y: screen.y,
+                                        radius: flashRadius * 0.5,
+                                        maxRadius: flashRadius * 3,
+                                        alpha: 0.4,
+                                        decayRate: 0.015,
+                                        color: '#aaddff',
+                                        isRing: true,
+                                        ringWidth: 3
+                                    });
+                                }
                             }
                         }
                     }
@@ -1081,8 +1136,9 @@
                 // Animate collision flashes (runs even when paused for smooth fadeout)
                 for (let i = collisionFlashes.length - 1; i >= 0; i--) {
                     const flash = collisionFlashes[i];
-                    flash.radius += 4;
-                    flash.alpha -= 0.03;
+                    // Expand toward maxRadius
+                    flash.radius += (flash.maxRadius - flash.radius) * 0.15;
+                    flash.alpha -= flash.decayRate || 0.03;
                     if (flash.alpha <= 0) {
                         collisionFlashes.splice(i, 1);
                     }
